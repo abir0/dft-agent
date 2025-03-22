@@ -9,6 +9,16 @@ __pycache__
 env
 venv
 .venv
-*.db
+*.so
+.pytest_cache
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+.idea/
+.vscode/
+*.swp
+*.swo
 .langgraph_api
 .ruff_cache
