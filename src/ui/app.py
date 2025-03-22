@@ -29,7 +29,7 @@ from dotenv import load_dotenv
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from agents.client import AgentClient, AgentClientError
-from schema.schema import ChatHistory, ChatMessage
+from core.schema import ChatHistory, ChatMessage
 
 # Title and icon for head
 APP_TITLE = "AI Agents Service"

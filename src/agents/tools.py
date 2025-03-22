@@ -13,8 +13,8 @@ from langchain_core.tools import tool
 from langchain_experimental.utilities import PythonREPL
 
 from agents.rag import FAISSManager
+from core import PostgresDBSearchInput, PostgresDBSearchOutput
 from database import AsyncPostgresManager
-from schema import PostgresDBSearchInput, PostgresDBSearchOutput
 from settings import settings
 
 

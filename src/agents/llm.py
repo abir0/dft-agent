@@ -7,7 +7,7 @@ from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
 from langchain_ollama import ChatOllama
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
 
-from schema import (
+from core import (
     AllModelEnum,
     FakeModelName,
     GroqModelName,

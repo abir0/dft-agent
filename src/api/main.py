@@ -10,7 +10,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from agents import DEFAULT_AGENT, get_agent, get_all_agent_info
 from api.endpoints import agent, vector_db
-from schema import ServiceMetadata
+from core import ServiceMetadata
 from settings import settings
 
 warnings.filterwarnings("ignore", category=LangChainBetaWarning)

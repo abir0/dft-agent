@@ -4,7 +4,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from agents.library.chatbot import chatbot
 from agents.library.data_analyst import data_analyst
-from schema import AgentInfo
+from core import AgentInfo
 
 DEFAULT_AGENT = "data-analyst"
 

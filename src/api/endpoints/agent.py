@@ -23,7 +23,7 @@ from api.utils import (
     langchain_to_chat_message,
     remove_tool_calls,
 )
-from schema import (
+from core import (
     ChatHistory,
     ChatHistoryInput,
     ChatMessage,

@@ -1,8 +1,8 @@
 import asyncio
 
 from agents import AgentClient
+from core import ChatMessage
 from settings import settings
-from schema import ChatMessage
 
 
 # Async client mode

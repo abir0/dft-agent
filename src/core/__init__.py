@@ -1,4 +1,4 @@
-from schema.models import (
+from core.models import (
     AllModelEnum,
     FakeModelName,
     GroqModelName,
@@ -7,7 +7,7 @@ from schema.models import (
     OpenAIModelName,
     Provider,
 )
-from schema.schema import (
+from core.schema import (
     AgentInfo,
     ChatHistory,
     ChatHistoryInput,
