@@ -3,6 +3,7 @@
 weaviate_data/
 faiss_index/
 logs/
+credentials.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
