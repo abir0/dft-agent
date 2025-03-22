@@ -15,7 +15,7 @@ RUN uv sync --frozen --only-group client
 
 # Copy source files
 COPY src/ui .
-COPY src/schema ./schema
+COPY src/core ./core
 COPY src/agents/client.py ./agents/client.py
 
 CMD ["streamlit", "run", "app.py"]
