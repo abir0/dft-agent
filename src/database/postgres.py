@@ -95,8 +95,7 @@ class AsyncPostgresManager:
 
             # Handle nested Pydantic models and lists
             if (
-                (isinstance(field_type, type)
-                and issubclass(field_type, BaseModel))
+                (isinstance(field_type, type) and issubclass(field_type, BaseModel))
                 or field_type in (dict, list)
                 or getattr(field_type, "__origin__", None) is list
             ):

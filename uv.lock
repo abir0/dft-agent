@@ -476,6 +476,7 @@ dependencies = [
     { name = "numexpr" },
     { name = "openai" },
     { name = "pandas" },
+    { name = "paramiko" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pymatgen" },
@@ -483,6 +484,7 @@ dependencies = [
     { name = "python-multipart" },
     { name = "requests" },
     { name = "seaborn" },
+    { name = "seekpath" },
     { name = "setuptools" },
     { name = "sqlalchemy" },
     { name = "streamlit" },
@@ -531,6 +533,7 @@ requires-dist = [
     { name = "numexpr" },
     { name = "openai" },
     { name = "pandas" },
+    { name = "paramiko" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pymatgen" },
@@ -538,6 +541,7 @@ requires-dist = [
     { name = "python-multipart" },
     { name = "requests" },
     { name = "seaborn" },
+    { name = "seekpath" },
     { name = "setuptools" },
     { name = "sqlalchemy" },
     { name = "streamlit" },
@@ -2487,6 +2491,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/86/59/a451d7420a77ab0b98f7affa3a1d78a313d2f7281a57afb1a34bae8ab412/seaborn-0.13.2.tar.gz", hash = "sha256:93e60a40988f4d65e9f4885df477e2fdaff6b73a9ded434c1ab356dd57eefff7", size = 1457696, upload-time = "2024-01-25T13:21:52.551Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/83/11/00d3c3dfc25ad54e731d91449895a79e4bf2384dc3ac01809010ba88f6d5/seaborn-0.13.2-py3-none-any.whl", hash = "sha256:636f8336facf092165e27924f223d3c62ca560b1f2bb5dff7ab7fad265361987", size = 294914, upload-time = "2024-01-25T13:21:49.598Z" },
+]
+
+[[package]]
+name = "seekpath"
+version = "2.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "spglib" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/55/6c/0a0525f78062d126f29930042d26478824d56fb7dca754373368309a02d2/seekpath-2.1.0.tar.gz", hash = "sha256:31cec579628262e6d4a4c3693fefa70d6ccae1ceeef7c9d10ea3cd48988452c4", size = 62257, upload-time = "2023-05-19T17:44:30.3Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/30/2c/fcb31e185a3a74d4098d9c44ac108ddcf1a4c88d7d3cea5a569dd812c62b/seekpath-2.1.0-py2.py3-none-any.whl", hash = "sha256:e825d0b17e3fcca4aa27e979888665e72209faa3215687db47dbf0e075551bb3", size = 77526, upload-time = "2023-05-19T17:44:27.698Z" },
 ]
 
 [[package]]
