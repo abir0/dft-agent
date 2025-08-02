@@ -30,6 +30,16 @@ from agents.llm import get_model, settings
 
 
 # Enhanced State Management
+class JobInfo(TypedDict):
+    """Structure for job information"""
+
+    job_id: str
+    job_type: str
+    status: str
+    submitted_time: str
+    completion_time: Optional[str]
+
+
 class CalculationResult(TypedDict):
     """Structure for storing calculation results"""
 
@@ -51,24 +61,29 @@ class DFTWorkflowState(MessagesState, total=False):
     # Structure information
     structure: Optional[Dict]
     structure_source: Optional[str]  # 'mp', 'cif', 'prototype', etc.
+    material_name: Optional[str]  # For tracking specific materials like ScNiSb
 
     # Calculation parameters
     convergence_params: Optional[Dict]
     optimized_structure: Optional[Dict]
+    calculation_config: Optional[Dict]  # SOC, magnetic, etc.
 
     # Calculation results
     calculation_results: Dict[str, CalculationResult]
 
     # Job management
-    active_jobs: List[Dict]
+    active_jobs: List[JobInfo]
+    completed_jobs: List[JobInfo]
 
     # Error tracking
     error_count: int
     max_retries: int
+    retry_strategies: Dict[str, str]
 
     # Workflow control
     parallel_ready: bool
     workflow_complete: bool
+    analysis_complete: bool
 
 
 # Enhanced System Instructions
@@ -82,9 +97,11 @@ You orchestrate complex quantum mechanical calculations with precision and effic
 - Quantum ESPRESSO input preparation
 - Convergence testing and geometry optimization
 - Electronic structure calculations (bands, DOS, pDOS)
+- Advanced property calculations (topological, phonon, transport, magnetic, optical)
 - High-performance computing job management
 - Results analysis and interpretation
 
+**Current Material:** {material_name}
 **Workflow Philosophy:**
 1. **Systematic Approach**: Follow established DFT best practices
 2. **Quality Control**: Verify convergence before proceeding
@@ -95,12 +112,14 @@ You orchestrate complex quantum mechanical calculations with precision and effic
 **Current Workflow State:** {current_step}
 **Completed Steps:** {completed_calculations}
 **Pending Calculations:** {pending_parallel_calcs}
+**Active Jobs:** {active_jobs}
 
 Always explain your reasoning and provide context for your decisions.
 If calculations fail, analyze the error and suggest corrections.
+For materials like ScNiSb, consider topological properties and spin-orbit coupling effects.
 """
 
-# Tools list
+# Enhanced tools list with advanced property calculations
 tools = [
     materials_project_lookup,
     generate_structure_tool,
@@ -109,6 +128,11 @@ tools = [
     bands_calc_tool,
     dos_calc_tool,
     pdos_calc_tool,
+    # topological_invariant_calc_tool,  # Available when needed
+    # phonon_calc_tool,  # Available when needed
+    # boltztrap_calc_tool,  # Available when needed
+    # magnetic_properties_calc_tool,  # Available when needed
+    # optical_properties_calc_tool,  # Available when needed
     qe_to_ase_tool,
     submit_job_tool,
     get_k_path,
@@ -125,11 +149,15 @@ def wrap_model(model: BaseChatModel) -> RunnableSerializable:
         current_step = state.get("current_step", "initialization")
         completed = state.get("completed_calculations", [])
         pending = state.get("pending_parallel_calcs", [])
+        material_name = state.get("material_name", "Unknown")
+        active_jobs = state.get("active_jobs", [])
 
         instructions = SYSTEM_INSTRUCTIONS.format(
             current_step=current_step,
             completed_calculations=", ".join(completed) if completed else "None",
             pending_parallel_calcs=", ".join(pending) if pending else "None",
+            material_name=material_name,
+            active_jobs=len(active_jobs),
         )
 
         return [SystemMessage(content=instructions)] + state["messages"]
@@ -263,6 +291,8 @@ async def chatbot_node(
         current_step=current_step,
         completed_calculations=", ".join(completed) if completed else "None",
         pending_parallel_calcs=", ".join(pending) if pending else "None",
+        material_name=state.get("material_name", "Unknown"),
+        active_jobs=len(state.get("active_jobs", [])),
     )
 
     # Prepare the messages with system instructions
@@ -348,7 +378,7 @@ def geometry_optimization(state: DFTWorkflowState) -> DFTWorkflowState:
 
 
 def parallel_coordinator(state: DFTWorkflowState) -> DFTWorkflowState:
-    """Coordinate parallel calculations without Send API"""
+    """Coordinate parallel calculations with advanced properties"""
     if not state.get("optimized_structure") and not state.get("structure"):
         return {
             "messages": [
@@ -359,8 +389,30 @@ def parallel_coordinator(state: DFTWorkflowState) -> DFTWorkflowState:
             "current_step": "error",
         }
 
-    # Set up parallel calculations to be executed
-    pending_calcs = ["bands", "dos", "pdos"]
+    # Enhanced parallel calculations including advanced properties
+    base_calcs = ["bands", "dos", "pdos"]
+
+    # Determine which calculations to run based on material and configuration
+    material_name = state.get("material_name", "").lower()
+    calc_config = state.get("calculation_config", {})
+
+    pending_calcs = base_calcs.copy()
+
+    # Add advanced calculations based on material type and user configuration
+    if "scnisb" in material_name or calc_config.get("topological", False):
+        pending_calcs.append("topological")
+
+    if calc_config.get("include_phonon", True):
+        pending_calcs.append("phonon")
+
+    if calc_config.get("include_transport", True):
+        pending_calcs.append("transport")
+
+    if calc_config.get("magnetic", False):
+        pending_calcs.append("magnetic")
+
+    if calc_config.get("optical", False):
+        pending_calcs.append("optical")
 
     return {
         "current_step": "parallel_calculations",
@@ -368,7 +420,7 @@ def parallel_coordinator(state: DFTWorkflowState) -> DFTWorkflowState:
         "parallel_ready": True,
         "messages": [
             AIMessage(
-                content="Setting up parallel electronic structure calculations: bands, DOS, and pDOS..."
+                content=f"Setting up parallel calculations: {', '.join(pending_calcs)}..."
             )
         ],
     }

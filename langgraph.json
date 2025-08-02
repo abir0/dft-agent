@@ -2,7 +2,10 @@
     "dockerfile_lines": [],
     "graphs": {
         "chatbot": "./src/agents/library/chatbot.py:chatbot",
-        "dft_agent": "./src/agents/library/dft_agent.py:dft_agent"
+        "dft_agent": "./src/agents/library/dft_agent.py:dft_agent",
+        "research_agent": "./src/agents/library/research_agent.py:research_agent",
+        "planner_agent": "./src/agents/library/planner_agent.py:planner_agent",
+        "orchestrator_agent": "./src/agents/library/orchestrator_agent.py:orchestrator_agent"
     },
     "env": ".env",
     "python_version": "3.12",
