@@ -128,7 +128,7 @@ class ChatMessage(BaseModel):
         return f"{title}\n\n{self.content}"
 
     def pretty_print(self) -> None:
-        print(self.pretty_repr())  # noqa: T201
+        print(self.pretty_repr())
 
 
 class Feedback(BaseModel):

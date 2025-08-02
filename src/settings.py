@@ -2,7 +2,7 @@ import os
 from typing import Annotated, Any
 
 from dotenv import find_dotenv
-from pydantic import BeforeValidator, HttpUrl, SecretStr, TypeAdapter, computed_field
+from pydantic import BeforeValidator, HttpUrl, SecretStr, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from core import (
@@ -14,22 +14,9 @@ from core import (
     OpenAIModelName,
     Provider,
 )
+from utils.url import ensure_https
 
-
-def check_str_is_http(x: str) -> str:
-    http_url_adapter = TypeAdapter(HttpUrl)
-    return str(http_url_adapter.validate_python(x))
-
-
-def coerce_to_url(url: str | None) -> HttpUrl | None:
-    if not url:
-        return None
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url
-    return TypeAdapter(HttpUrl).validate_python(url)
-
-
-HttpUrlAnnotated = Annotated[HttpUrl | None, BeforeValidator(coerce_to_url)]
+HttpUrlAnnotated = Annotated[HttpUrl | None, BeforeValidator(ensure_https)]
 
 
 class Settings(BaseSettings):
@@ -43,7 +30,7 @@ class Settings(BaseSettings):
     MODE: str | None = None
 
     # API service title and version
-    TITLE: str = "ai_agents_service"
+    TITLE: str = "dft_agent"
     VERSION: str = "0.0.1"
 
     HOST: str = "0.0.0.0"
@@ -62,12 +49,7 @@ class Settings(BaseSettings):
     DEFAULT_MODEL: AllModelEnum | None = None  # type: ignore[assignment]
     AVAILABLE_MODELS: set[AllModelEnum] = set()  # type: ignore[assignment]
 
-    OPENWEATHERMAP_API_KEY: SecretStr | None = None
-
-    LANGCHAIN_TRACING_V2: bool = False
-    LANGCHAIN_PROJECT: str = "default"
-    LANGCHAIN_ENDPOINT: HttpUrlAnnotated = "https://api.smith.langchain.com"
-    LANGCHAIN_API_KEY: SecretStr | None = None
+    MP_API_KEY: SecretStr | None = None
 
     # Database settings
     DATABASE_URL: str = "postgresql+asyncpg://user:password@localhost/dbname"

@@ -5,13 +5,13 @@ from agents.rag import FAISSManager, WeaviateManager
 from settings import settings
 
 __all__ = [
-    "get_agent",
-    "get_all_agent_info",
     "DEFAULT_AGENT",
-    "get_model",
     "AgentClient",
     "AgentClientError",
     "FAISSManager",
     "WeaviateManager",
+    "get_agent",
+    "get_all_agent_info",
+    "get_model",
     "settings",
 ]

@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from typing import Any, List, Optional, Type, TypeVar, Union
+from typing import List, Optional, Type, TypeVar, Union
 
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -95,8 +95,8 @@ class AsyncPostgresManager:
 
             # Handle nested Pydantic models and lists
             if (
-                isinstance(field_type, type)
-                and issubclass(field_type, BaseModel)
+                (isinstance(field_type, type)
+                and issubclass(field_type, BaseModel))
                 or field_type in (dict, list)
                 or getattr(field_type, "__origin__", None) is list
             ):
@@ -216,9 +216,7 @@ class AsyncPostgresManager:
                 print(f"Data with id '{data_id}' not found in table '{table_name}'")
             await session.commit()
 
-    async def query_data(
-        self, query: str, parameters: List[dict] = None
-    ) -> List[dict]:
+    async def query_data(self, query: str, parameters: List[dict] = None) -> List[dict]:
         """
         Query data using SQL expressions.
 
@@ -236,5 +234,5 @@ class AsyncPostgresManager:
             else:
                 # Execute with parameters if provided
                 result = await session.execute(text(query), parameters[0])
-            
+
             return [dict(row._mapping) for row in result]

@@ -29,9 +29,7 @@ _MODEL_TABLE = {
     HuggingFaceModelName.DEEPSEEK_V3: "deepseek-ai/DeepSeek-V3",
 }
 
-ModelT: TypeAlias = (
-    ChatOpenAI | AzureChatOpenAI | ChatGroq | ChatOllama | ChatHuggingFace
-)
+ModelT: TypeAlias = ChatOpenAI | AzureChatOpenAI | ChatGroq | ChatOllama | ChatHuggingFace
 
 
 @cache

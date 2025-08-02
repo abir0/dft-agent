@@ -109,9 +109,7 @@ def postgres_db_search(
         db_url = settings.DATABASE_URL
 
         if not db_url:
-            raise ValueError(
-                "PostgreSQL database URL not found in environment variables"
-            )
+            raise ValueError("PostgreSQL database URL not found in environment variables")
 
         # Ensure parameters is either None or a valid list of parameter dictionaries
         if parameters is not None and not isinstance(parameters, list):

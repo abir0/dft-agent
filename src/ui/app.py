@@ -14,7 +14,7 @@ The app heavily uses AgentClient to interact with the agent's FastAPI endpoints.
 import os
 import sys
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))  # noqa: E402
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
 
 import asyncio
 import base64
@@ -258,7 +258,7 @@ async def draw_messages(
     streaming_placeholder = None
 
     # Iterate over the messages and draw them
-    while msg := await anext(messages_agen, None):  # noqa: F821
+    while msg := await anext(messages_agen, None):
         # str message represents an intermediate token being streamed
         if isinstance(msg, str):
             # If placeholder is empty, this is the first token of a new message
@@ -302,9 +302,7 @@ async def draw_messages(
                             streaming_content = ""
                             streaming_placeholder = None
                         else:
-                            st.write(
-                                replace_img_tag(msg.content), unsafe_allow_html=True
-                            )
+                            st.write(replace_img_tag(msg.content), unsafe_allow_html=True)
 
                     if msg.tool_calls:
                         # Create a status container for each tool call and store the
@@ -322,7 +320,7 @@ async def draw_messages(
 
                         # Expect one ToolMessage for each tool call
                         for _ in range(len(call_results)):
-                            tool_result: ChatMessage = await anext(messages_agen)  # noqa: F821
+                            tool_result: ChatMessage = await anext(messages_agen)
                             if tool_result.type != "tool":
                                 st.error(
                                     f"Unexpected ChatMessage type: {tool_result.type}"

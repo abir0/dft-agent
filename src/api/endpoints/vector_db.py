@@ -71,8 +71,7 @@ async def search_documents(faiss_query: FaissQuery):
         )
         return {
             "results": [
-                {"content": doc.page_content, "metadata": doc.metadata}
-                for doc in results
+                {"content": doc.page_content, "metadata": doc.metadata} for doc in results
             ]
         }
     except Exception as e:
