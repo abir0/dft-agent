@@ -228,7 +228,7 @@ def get_k_path(
             raise ValueError("Either structure_json or cif_file must be provided.")
 
         if cif_file is not None:
-            struct = Structure.from_file("ScSbPd.cif")
+            struct = Structure.from_file(cif_file)
         else:
             struct = Structure.from_dict(structure_json)
         cell = struct.lattice.matrix.tolist()
