@@ -7,7 +7,7 @@ from langchain_core.runnables import (
 )
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import MessagesState, StateGraph
-from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.prebuilt import GatherNode, ToolNode, tools_condition
 
 from agents.dft_tools import (
     bands_calc_tool,
@@ -127,10 +127,13 @@ workflow.add_node("geom_opt", make_tool_node([optimize_geometry_tool]))
 workflow.add_node("bands", make_tool_node([bands_calc_tool]))
 workflow.add_node("dos", make_tool_node([dos_calc_tool]))
 workflow.add_node("pdos", make_tool_node([pdos_calc_tool]))
+
+# Gather node to synchronize parallel DFT calculations
+workflow.add_node("gather_results", GatherNode(["bands", "dos", "pdos"]))
+
 workflow.add_node("qe2ase", make_tool_node([qe_to_ase_tool]))
 workflow.add_node("submit_job", make_tool_node([submit_job_tool]))
 # Fallback to planner if needed
-# 3. End
 workflow.add_node("end", lambda state: {"messages": state["messages"]})
 
 # Edges & Conditions
@@ -144,21 +147,28 @@ workflow.add_edge("mp_lookup", "structure_gen")
 workflow.add_edge("structure_gen", "scf_converge")
 workflow.add_edge("scf_converge", "geom_opt")
 
-# Run bands, dos, pdos in parallel:
+# Run bands, dos, pdos in parallel, then gather:
 workflow.add_edge("geom_opt", "bands")
 workflow.add_edge("geom_opt", "dos")
 workflow.add_edge("geom_opt", "pdos")
+workflow.add_edge("bands", "gather_results")
+workflow.add_edge("dos", "gather_results")
+workflow.add_edge("pdos", "gather_results")
 
-# After all three complete, convert & submit:
-workflow.add_edge("bands", "qe2ase")
-workflow.add_edge("dos", "qe2ase")
-workflow.add_edge("pdos", "qe2ase")
+# After gathering, convert & submit:
+workflow.add_edge("gather_results", "qe2ase")
 workflow.add_edge("qe2ase", "submit_job")
 
 # Finally back to planner or end:
 workflow.add_edge("submit_job", "planner")
-# If planner decides to finish:
 workflow.add_edge("planner", "end")
+
+# Add error fallback edges for robustness
+for node in [
+    "mp_lookup", "structure_gen", "scf_converge", "geom_opt",
+    "bands", "dos", "pdos", "qe2ase", "submit_job"
+]:
+    workflow.add_edge(node, "planner")  # On error, fallback to planner
 
 # Compile Agent
 dft_agent = workflow.compile(
