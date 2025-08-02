@@ -10,6 +10,7 @@ from tenacity import (
     wait_exponential,
 )
 
+from core.exceptions import RateLimitException, RequestException
 from logger import logger
 
 

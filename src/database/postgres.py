@@ -215,7 +215,9 @@ class AsyncPostgresManager:
                 print(f"Data with id '{data_id}' not found in table '{table_name}'")
             await session.commit()
 
-    async def query_data(self, query: str, parameters: List[dict] = None) -> List[dict]:
+    async def query_data(
+        self, query: str, parameters: Optional[List[dict]] = None
+    ) -> List[dict]:
         """
         Query data using SQL expressions.
 

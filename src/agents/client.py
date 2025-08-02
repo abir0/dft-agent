@@ -1,7 +1,7 @@
 import json
 import os
 from collections.abc import AsyncGenerator, Generator
-from typing import Any
+from typing import Any, Optional
 
 import httpx
 
@@ -26,7 +26,7 @@ class AgentClient:
     def __init__(
         self,
         base_url: str = "http://0.0.0.0",
-        agent: str = None,
+        agent: Optional[str] = None,
         timeout: float | None = None,
         get_info: bool = True,
     ) -> None:
