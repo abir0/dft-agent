@@ -5,7 +5,6 @@ from langchain_core.runnables import (
     RunnableLambda,
     RunnableSerializable,
 )
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, MessagesState, StateGraph
 
 from agents.llm import get_model, settings
@@ -43,6 +42,4 @@ workflow.add_node("model", acall_model)
 workflow.set_entry_point("model")
 workflow.add_edge("model", END)
 
-chatbot = workflow.compile(
-    checkpointer=MemorySaver(),
-)
+chatbot = workflow.compile()
