@@ -7,11 +7,11 @@ import paramiko
 import seekpath
 from ase import Atoms
 from ase.io import read as ase_read
+from ase.io.espresso import read_espresso_in, write_espresso_in
 from langchain_core.tools import tool
 from pymatgen.core import Structure
 from pymatgen.ext.matproj import MPRester
 from pymatgen.io.cif import CifParser
-from pymatgen.io.qe import PWInput
 
 
 # Materials Project lookup
@@ -105,14 +105,31 @@ def bands_calc_tool(qe_input_text: str, kpath_json: str) -> str:
     """
     try:
         kdata = json.loads(kpath_json)
-        pw_input = PWInput.from_string(qe_input_text)
-        pw_input.kpoints = {"explicit": kdata["path"]}
-        pw_input.control["calculation"] = "bands"
-        pw_input.write_file("bands.in")
+
+        # Read the QE input file using ASE
+        with open("temp_input.in", "w") as f:
+            f.write(qe_input_text)
+        atoms = read_espresso_in("temp_input.in")
+
+        # Create new input with bands calculation and explicit k-points
+        kpoints = kdata["path"]
+        kpoints_string = f"K_POINTS crystal\n{len(kpoints)}\n"
+        for kpt in kpoints:
+            kpoints_string += f"{kpt[0]:.10f} {kpt[1]:.10f} {kpt[2]:.10f} 0.0\n"
+
+        # Write new input file with bands calculation
+        write_espresso_in(
+            "bands.in", atoms, input_data={"calculation": "bands"}, kpoints=kpoints_string
+        )
+
         subprocess.run(["pw.x", "-in", "bands.in"], check=True)
         return json.dumps({"status": "bands job completed", "kpath": kdata["path"]})
     except Exception as e:
         raise RuntimeError(f"Band structure calc failed: {e}")
+    finally:
+        # Clean up temporary file
+        if os.path.exists("temp_input.in"):
+            os.remove("temp_input.in")
 
 
 # DOS calculation
@@ -153,11 +170,17 @@ def qe_to_ase_tool(qe_input_text: str) -> Any:
     Parse QE input to ASE Atoms.
     """
     try:
-        pw_input = PWInput.from_string(qe_input_text)
-        struct = pw_input.structure
-        return Atoms(symbols=struct.species, positions=struct.cart_coords.tolist())
+        # Write QE input to temporary file and read with ASE
+        with open("temp_qe_input.in", "w") as f:
+            f.write(qe_input_text)
+        atoms = read_espresso_in("temp_qe_input.in")
+        return atoms
     except Exception as e:
         raise RuntimeError(f"QE->ASE conversion failed: {e}")
+    finally:
+        # Clean up temporary file
+        if os.path.exists("temp_qe_input.in"):
+            os.remove("temp_qe_input.in")
 
 
 # Submit jobs backend
@@ -283,25 +306,52 @@ def bilbao_crystal_tool(prototype: str) -> str:
     return f"# CIF for prototype {prototype} (retrieved from Bilbao)\n..."
 
 
-# 12. QE input generator using pymatgen's PWInput
+# QE input generator using ASE
 @tool("qe_input_generator_tool", return_direct=True)
 def qe_input_generator_tool(structure_cif: str, params: Dict[str, Any]) -> str:
     """
-    Generate Quantum ESPRESSO PW input using pymatgen.io.qe.
+    Generate Quantum ESPRESSO PW input using ASE.
     Args:
         structure_cif: CIF-format string
         params: dict of control, system, electrons, kpoints_grid
     """
     try:
+        # Parse CIF structure using pymatgen and convert to ASE
         struct = CifParser.from_string(structure_cif).get_structures()[0]
-        inp = PWInput(
-            structure=struct,
-            control=params.get("control", {}),
-            system=params.get("system", {}),
-            electrons=params.get("electrons", {}),
-            kpoints_mode="automatic",
-            kpoints_grid=params.get("kpoints_grid", [6, 6, 6]),
+        atoms = Atoms(
+            symbols=[str(site.specie) for site in struct],
+            positions=struct.cart_coords,
+            cell=struct.lattice.matrix,
+            pbc=True,
         )
-        return inp.get_string()
+
+        # Prepare input parameters
+        input_data = {}
+        input_data.update(params.get("control", {}))
+        input_data.update(params.get("system", {}))
+        input_data.update(params.get("electrons", {}))
+
+        # Set default calculation if not specified
+        if "calculation" not in input_data:
+            input_data["calculation"] = "scf"
+
+        # Generate k-points
+        kpoints_grid = params.get("kpoints_grid", [6, 6, 6])
+        kpoints_string = f"K_POINTS automatic\n{kpoints_grid[0]} {kpoints_grid[1]} {kpoints_grid[2]} 0 0 0\n"
+
+        # Write to temporary file and read back as string
+        write_espresso_in(
+            "temp_qe_gen.in", atoms, input_data=input_data, kpoints=kpoints_string
+        )
+
+        with open("temp_qe_gen.in", "r") as f:
+            qe_input_string = f.read()
+
+        return qe_input_string
+
     except Exception as e:
         raise RuntimeError(f"QE input generation failed: {e}")
+    finally:
+        # Clean up temporary file
+        if os.path.exists("temp_qe_gen.in"):
+            os.remove("temp_qe_gen.in")
