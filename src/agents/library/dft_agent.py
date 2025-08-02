@@ -165,8 +165,15 @@ workflow.add_edge("planner", "end")
 
 # Add error fallback edges for robustness
 for node in [
-    "mp_lookup", "structure_gen", "scf_converge", "geom_opt",
-    "bands", "dos", "pdos", "qe2ase", "submit_job"
+    "mp_lookup",
+    "structure_gen",
+    "scf_converge",
+    "geom_opt",
+    "bands",
+    "dos",
+    "pdos",
+    "qe2ase",
+    "submit_job",
 ]:
     workflow.add_edge(node, "planner")  # On error, fallback to planner
 

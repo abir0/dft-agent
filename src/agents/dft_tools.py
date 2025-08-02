@@ -1,7 +1,7 @@
 import json
 import os
 import subprocess
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import paramiko
 import seekpath
@@ -14,7 +14,7 @@ from pymatgen.io.cif import CifParser
 from pymatgen.io.qe import PWInput
 
 
-# 1. Materials Project lookup
+# Materials Project lookup
 @tool("materials_project_lookup", return_direct=True)
 def materials_project_lookup(material_id: str) -> str:
     """
@@ -37,7 +37,7 @@ def materials_project_lookup(material_id: str) -> str:
         raise RuntimeError(f"MP lookup failed: {e}")
 
 
-# 2. Generate structure from CIF or prototype
+# Generate structure from CIF or prototype
 @tool("generate_structure_tool", return_direct=True)
 def generate_structure_tool(cif_or_proto: str) -> str:
     """
@@ -59,7 +59,7 @@ def generate_structure_tool(cif_or_proto: str) -> str:
         raise RuntimeError(f"Structure generation failed: {e}")
 
 
-# 3. Convergence testing
+# Convergence testing
 @tool("convergence_test_tool", return_direct=True)
 def convergence_test_tool(base_qe_input: str) -> str:
     """
@@ -74,7 +74,7 @@ def convergence_test_tool(base_qe_input: str) -> str:
         raise RuntimeError(f"Convergence test failed: {e}")
 
 
-# 4. Geometry optimization
+# Geometry optimization
 @tool("optimize_geometry_tool", return_direct=True)
 def optimize_geometry_tool(qe_input_text: str) -> str:
     """
@@ -94,7 +94,7 @@ def optimize_geometry_tool(qe_input_text: str) -> str:
         raise RuntimeError(f"Geometry optimization failed: {e}")
 
 
-# 5. Band structure calculation
+# Band structure calculation
 @tool("bands_calc_tool", return_direct=True)
 def bands_calc_tool(qe_input_text: str, kpath_json: str) -> str:
     """
@@ -115,7 +115,7 @@ def bands_calc_tool(qe_input_text: str, kpath_json: str) -> str:
         raise RuntimeError(f"Band structure calc failed: {e}")
 
 
-# 6. DOS calculation
+# DOS calculation
 @tool("dos_calc_tool", return_direct=True)
 def dos_calc_tool(qe_input_text: str) -> str:
     """
@@ -131,7 +131,7 @@ def dos_calc_tool(qe_input_text: str) -> str:
         raise RuntimeError(f"DOS calc failed: {e}")
 
 
-# 7. pDOS calculation
+# pDOS calculation
 @tool("pdos_calc_tool", return_direct=True)
 def pdos_calc_tool(qe_input_text: str) -> str:
     """
@@ -146,7 +146,7 @@ def pdos_calc_tool(qe_input_text: str) -> str:
         raise RuntimeError(f"pDOS calc failed: {e}")
 
 
-# 8. QE to ASE converter
+# QE to ASE converter
 @tool("qe_to_ase_tool", return_direct=True)
 def qe_to_ase_tool(qe_input_text: str) -> Any:
     """
@@ -160,7 +160,7 @@ def qe_to_ase_tool(qe_input_text: str) -> Any:
         raise RuntimeError(f"QE->ASE conversion failed: {e}")
 
 
-# 9. Submit jobs backend
+# Submit jobs backend
 @tool("submit_job_tool", return_direct=True)
 def submit_job_tool(config: Dict[str, Any]) -> str:
     """
@@ -194,22 +194,87 @@ pw.x < {config["input_file"]} > {config["input_file"]}.log
         raise ValueError(f"Unknown mode {mode}")
 
 
-# 10. SeeK-path tool
-@tool("seekpath_tool", return_direct=True)
-def seekpath_tool(structure_json: str) -> str:
+# SeeK-path tool
+@tool("get_k_path", return_direct=True)
+def get_k_path(
+    structure_json: Optional[dict] = None, cif_file: Optional[str] = None
+) -> dict:
     """
-    Compute high-symmetry k-path using seekpath.
-    Input: JSON-serialized pymatgen structure dict.
+    Compute the high-symmetry k-point path for a crystal structure using Seekpath.
+
+    Accepts a pymatgen structure as a JSON dict or a CIF file path. Returns a dictionary
+    with the primitive cell, k-point coordinates along the recommended path, and labels.
+
+    Parameters:
+        structure_json (dict, optional): JSON-like pymatgen Structure dict.
+        cif_file (str, optional): Path to a CIF file.
+
+    Returns:
+        dict: A dictionary Seekpath output includes keys such as: 'point_coords', 'path',
+        'primitive_lattice', 'primitive_positions', 'primitive_types', 'explicit_kpoints_rel',
+        'explicit_kpoints_labels', 'explicit_segments', etc.
+
+    Raises:
+        ValueError: If neither `structure_json` nor `cif_file` is provided.
+        RuntimeError: If Seekpath fails to compute the k-path for any reason.
+
+    Notes:
+    - Use `kpath_to_kpoints` to convert results to Quantum ESPRESSO k-point input.
+    - Use `get_band_labels` to get band structure labels.
     """
+
     try:
-        struct = Structure.from_dict(json.loads(structure_json))
-        _, details = seekpath.get_explicit_k_path(struct.as_dict())
-        return json.dumps(details)
+        if structure_json is None and cif_file is None:
+            raise ValueError("Either structure_json or cif_file must be provided.")
+
+        if cif_file is not None:
+            struct = Structure.from_file("ScSbPd.cif")
+        else:
+            struct = Structure.from_dict(structure_json)
+        cell = struct.lattice.matrix.tolist()
+        positions = [site.frac_coords.tolist() for site in struct]
+        numbers = [site.specie.number for site in struct]
+        tuple_input = (cell, positions, numbers)
+
+        details = seekpath.get_explicit_k_path(tuple_input)
+
+        return details
+
     except Exception as e:
         raise RuntimeError(f"SeeK-path failed: {e}")
 
 
-# 11. Bilbao Crystallographic Server lookup
+def kpath_to_kpoints(seekpath_data: dict, weight: float = 0.0) -> str:
+    """
+    Convert seekpath output to Quantum ESPRESSO band structure K_POINTS format.
+    """
+    kpoints = seekpath_data["explicit_kpoints_rel"]
+
+    lines = []
+    lines.append("K_POINTS crystal")
+    lines.append(str(len(kpoints)))
+    for kpt in kpoints:
+        kx, ky, kz = kpt
+        lines.append(f"{kx:.10f} {ky:.10f} {kz:.10f} {weight:.1f}")
+
+    return "\n".join(lines)
+
+
+def get_band_labels(seekpath_data):
+    """
+    Get band structure labels from seekpath output.
+    """
+    labels = seekpath_data["explicit_kpoints_labels"]
+    linear_coords = seekpath_data["explicit_kpoints_linearcoord"]
+
+    label_points = []
+    for x, label in zip(linear_coords, labels, strict=True):
+        if label:  # skip empty labels
+            label_points.append((x, label.replace("GAMMA", "Γ")))
+    return label_points
+
+
+# Bilbao Crystallographic Server lookup
 @tool("bilbao_crystal_tool", return_direct=True)
 def bilbao_crystal_tool(prototype: str) -> str:
     """
