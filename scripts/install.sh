@@ -11,7 +11,3 @@ source .venv/bin/activate
 
 # Add project src to python path
 export PYTHONPATH="$(pwd)/src:$PYTHONPATH"
-
-# Install playwright and its dependencies
-playwright install
-playwright install-deps

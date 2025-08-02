@@ -7,7 +7,7 @@ from langchain_core.runnables import (
 )
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import MessagesState, StateGraph
-from langgraph.prebuilt import GatherNode, ToolNode, tools_condition
+from langgraph.prebuilt import ToolNode, tools_condition
 
 from agents.dft_tools import (
     bands_calc_tool,
@@ -129,7 +129,7 @@ workflow.add_node("dos", make_tool_node([dos_calc_tool]))
 workflow.add_node("pdos", make_tool_node([pdos_calc_tool]))
 
 # Gather node to synchronize parallel DFT calculations
-workflow.add_node("gather_results", GatherNode(["bands", "dos", "pdos"]))
+workflow.add_node("gather_results")
 
 workflow.add_node("qe2ase", make_tool_node([qe_to_ase_tool]))
 workflow.add_node("submit_job", make_tool_node([submit_job_tool]))
