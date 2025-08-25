@@ -10,4 +10,4 @@ uv sync
 source .venv/bin/activate
 
 # Add project src to python path
-export PYTHONPATH="$(pwd)/src:$PYTHONPATH"
+export PYTHONPATH="$(pwd):$PYTHONPATH"

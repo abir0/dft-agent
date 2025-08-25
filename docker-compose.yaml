@@ -18,7 +18,7 @@ services:
   agent_service:
     build:
       context: .
-      dockerfile: src/api/Dockerfile
+      dockerfile: backend/Dockerfile
     ports:
       - "8080:8080"
     env_file:
@@ -32,7 +32,7 @@ services:
   streamlit_app:
     build:
       context: .
-      dockerfile: src/ui/Dockerfile
+      dockerfile: frontend/Dockerfile
     ports:
       - "8501:8501"
     depends_on:
