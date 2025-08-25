@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 
-from core import AgentInfo
 from langgraph.graph.state import CompiledStateGraph
 
 from backend.agents.library.chatbot import chatbot
+from backend.core import AgentInfo
 
-DEFAULT_AGENT = "dft-agent"
+DEFAULT_AGENT = "chatbot"
 
 
 @dataclass

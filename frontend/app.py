@@ -25,14 +25,15 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 
 import streamlit as st
-from agents.client import AgentClient, AgentClientError
-from core.schema import ChatHistory, ChatMessage
 from dotenv import load_dotenv
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
+from backend.agents.client import AgentClient, AgentClientError
+from backend.core.schema import ChatHistory, ChatMessage
+
 # Title and icon for head
 APP_TITLE = "AI Agents Service"
-APP_ICON = "./static/logo.svg"
+APP_ICON = "frontend/static/logo.svg"
 
 
 # Utility functions
