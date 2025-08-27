@@ -1,0 +1,75 @@
+[project]
+name = "dft-agent"
+version = "0.0.1"
+readme = "README.md"
+
+requires-python = ">=3.12, <3.13"
+
+dependencies = [
+    "ase",
+    "beautifulsoup4",
+    "duckduckgo-search",
+    "fastapi",
+    "google-api-python-client",
+    "google-auth-httplib2",
+    "google-auth-oauthlib",
+    "httpx",
+    "langchain-anthropic",
+    "langchain-community",
+    "langchain-core",
+    "langchain-experimental",
+    "langchain-huggingface",
+    "langchain-groq",
+    "langchain-ollama",
+    "langchain-openai",
+    "langgraph",
+    "langgraph-checkpoint-sqlite",
+    "langgraph-cli[inmem]",
+    "matplotlib",
+    "mp-api",
+    "numexpr",
+    "openai",
+    "pandas",
+    "paramiko",
+    "pydantic",
+    "pydantic-settings",
+    "pymatgen",
+    "python-dotenv",
+    "python-multipart",
+    "requests",
+    "seaborn",
+    "seekpath",
+    "setuptools",
+    "sqlalchemy",
+    "streamlit",
+    "tiktoken",
+    "typing-extensions",
+    "uvicorn",
+]
+
+[dependency-groups]
+client = [
+    "httpx",
+    "pydantic",
+    "python-dotenv",
+    "streamlit",
+    "typing-extensions",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.uv]
+dev-dependencies = [
+    "ruff",
+    "pytest",
+]
+
+[tool.ruff]
+line-length = 90
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "B", "I", "RUF"]
+ignore = ["E501", "B008", "B904", "RUF010"]
+exclude = ["__pycache__", ".venv", "build", "dist"]

@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <!-- Background with darker shade -->
+  <circle cx="100" cy="100" r="95" fill="#E9E9EB" />
+  
+  <!-- Centered crystal lattice structure -->
+  <g>
+    <!-- Main crystal structure - more centered -->
+    <path d="M100 35 L165 75 L165 135 L100 175 L35 135 L35 75 Z" fill="none" stroke="#8E8E93" stroke-width="6" />
+    
+    <!-- Inner connections -->
+    <line x1="100" y1="35" x2="100" y2="175" stroke="#8E8E93" stroke-width="6" opacity="0.75" />
+    <line x1="35" y1="75" x2="165" y2="135" stroke="#8E8E93" stroke-width="6" opacity="0.75" />
+    <line x1="35" y1="135" x2="165" y2="75" stroke="#8E8E93" stroke-width="6" opacity="0.75" />
+    
+    <!-- Nodes -->
+    <circle cx="100" cy="35" r="10" fill="#147EFB" />
+    <circle cx="165" cy="75" r="10" fill="#147EFB" />
+    <circle cx="165" cy="135" r="10" fill="#147EFB" />
+    <circle cx="100" cy="175" r="10" fill="#147EFB" />
+    <circle cx="35" cy="135" r="10" fill="#147EFB" />
+    <circle cx="35" cy="75" r="10" fill="#147EFB" />
+  </g>
+  
+  <!-- Larger AI Neural Network Element in Center -->
+  <g>
+    <!-- Neural network nodes -->
+    <circle cx="82" cy="85" r="7.5" fill="#AC39FF" />
+    <circle cx="118" cy="85" r="7.5" fill="#AC39FF" />
+    <circle cx="70" cy="115" r="7.5" fill="#AC39FF" />
+    <circle cx="100" cy="115" r="7.5" fill="#AC39FF" />
+    <circle cx="130" cy="115" r="7.5" fill="#AC39FF" />
+    
+    <!-- Neural connections -->
+    <line x1="82" y1="85" x2="70" y2="115" stroke="#AC39FF" stroke-width="4.5" opacity="0.85" />
+    <line x1="82" y1="85" x2="100" y2="115" stroke="#AC39FF" stroke-width="4.5" opacity="0.85" />
+    <line x1="82" y1="85" x2="130" y2="115" stroke="#AC39FF" stroke-width="4.5" opacity="0.85" />
+    <line x1="118" y1="85" x2="70" y2="115" stroke="#AC39FF" stroke-width="4.5" opacity="0.85" />
+    <line x1="118" y1="85" x2="100" y2="115" stroke="#AC39FF" stroke-width="4.5" opacity="0.85" />
+    <line x1="118" y1="85" x2="130" y2="115" stroke="#AC39FF" stroke-width="4.5" opacity="0.85" />
+  </g>
+</svg>
