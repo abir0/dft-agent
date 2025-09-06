@@ -1,0 +1,212 @@
+[
+    {
+        "data": [
+            {
+                "source": "literature",
+                "entry_id": null,
+                "adsorbate": "H",
+                "adsorbent": {
+                    "composition": "Al",
+                    "surface": "111",
+                    "miller_indices": "(111)",
+                    "adsorption_site": "top",
+                    "space_group": null,
+                    "is_most_stable_site": null,
+                },
+                "adsorption_energy": 0.427,
+                "units": "eV/f.u.",
+                "computational_settings": {
+                    "software": "CASTEP",
+                    "kpoint_mesh": [7, 7, 1],
+                    "xc_functional": "PBE",
+                    "energy_cutoff": "300",
+                    "force_cutoff": "0.03",
+                    "convergence_criteria": "1e-6",
+                },
+                "experimental_conditions": {"temperature": null, "pressure": null},
+                "metadata": {
+                    "doi": "doi.org/10.3390/atoms13020009",
+                    "authors": [
+                        "Wang, X., Guan, M., You, D., Xie, D., Hou, M., & Leng, Y."
+                    ],
+                    "year": 2025,
+                },
+            }
+        ]
+    },
+    {
+        "data": [
+            {
+                "source": "literature",
+                "entry_id": null,
+                "adsorbate": "H",
+                "adsorbent": {
+                    "composition": "Al",
+                    "surface": "111",
+                    "miller_indices": "(111)",
+                    "adsorption_site": "hcp",
+                    "space_group": null,
+                    "is_most_stable_site": null,
+                },
+                "adsorption_energy": 0.467,
+                "units": "eV/f.u.",
+                "computational_settings": {
+                    "software": "CASTEP",
+                    "kpoint_mesh": [7, 7, 1],
+                    "xc_functional": "PBE",
+                    "energy_cutoff": "300",
+                    "force_cutoff": "0.03",
+                    "convergence_criteria": "1e-6",
+                },
+                "experimental_conditions": {"temperature": null, "pressure": null},
+                "metadata": {
+                    "doi": "doi.org/10.3390/atoms13020009",
+                    "authors": [
+                        "Wang, X., Guan, M., You, D., Xie, D., Hou, M., & Leng, Y."
+                    ],
+                    "year": 2025,
+                },
+            }
+        ]
+    },
+    {
+        "data": [
+            {
+                "source": "literature",
+                "entry_id": null,
+                "adsorbate": "H",
+                "adsorbent": {
+                    "composition": "Al",
+                    "surface": "111",
+                    "miller_indices": "(111)",
+                    "adsorption_site": "fcc",
+                    "space_group": null,
+                    "is_most_stable_site": null,
+                },
+                "adsorption_energy": 0.349,
+                "units": "eV/f.u.",
+                "computational_settings": {
+                    "software": "CASTEP",
+                    "kpoint_mesh": [7, 7, 1],
+                    "xc_functional": "PBE",
+                    "energy_cutoff": "300",
+                    "force_cutoff": "0.03",
+                    "convergence_criteria": "1e-6",
+                },
+                "experimental_conditions": {"temperature": null, "pressure": null},
+                "metadata": {
+                    "doi": "doi.org/10.3390/atoms13020009",
+                    "authors": [
+                        "Wang, X., Guan, M., You, D., Xie, D., Hou, M., & Leng, Y."
+                    ],
+                    "year": 2025,
+                },
+            }
+        ]
+    },
+    {
+        "data": [
+            {
+                "source": "literature",
+                "entry_id": null,
+                "adsorbate": "H",
+                "adsorbent": {
+                    "composition": "U",
+                    "surface": "110",
+                    "miller_indices": "(110)",
+                    "adsorption_site": "Sb",
+                    "space_group": null,
+                    "is_most_stable_site": null,
+                },
+                "adsorption_energy": -3.683,
+                "units": "eV/f.u.",
+                "computational_settings": {
+                    "software": "CASTEP",
+                    "kpoint_mesh": [6, 6, 1],
+                    "xc_functional": "PBE",
+                    "energy_cutoff": "520",
+                    "force_cutoff": "0.03",
+                    "convergence_criteria": "1e-6",
+                },
+                "experimental_conditions": {"temperature": null, "pressure": null},
+                "metadata": {
+                    "doi": "doi.org/10.3390/atoms13020009",
+                    "authors": [
+                        "Wang, X., Guan, M., You, D., Xie, D., Hou, M., & Leng, Y."
+                    ],
+                    "year": 2025,
+                },
+            }
+        ]
+    },
+    {
+        "data": [
+            {
+                "source": "literature",
+                "entry_id": null,
+                "adsorbate": "H",
+                "adsorbent": {
+                    "composition": "U",
+                    "surface": "110",
+                    "miller_indices": "(110)",
+                    "adsorption_site": "hollow",
+                    "space_group": null,
+                    "is_most_stable_site": null,
+                },
+                "adsorption_energy": -3.828,
+                "units": "eV/f.u.",
+                "computational_settings": {
+                    "software": "CASTEP",
+                    "kpoint_mesh": [6, 6, 1],
+                    "xc_functional": "PBE",
+                    "energy_cutoff": "520",
+                    "force_cutoff": "0.03",
+                    "convergence_criteria": "1e-6",
+                },
+                "experimental_conditions": {"temperature": null, "pressure": null},
+                "metadata": {
+                    "doi": "doi.org/10.3390/atoms13020009",
+                    "authors": [
+                        "Wang, X., Guan, M., You, D., Xie, D., Hou, M., & Leng, Y."
+                    ],
+                    "year": 2025,
+                },
+            }
+        ]
+    },
+    {
+        "data": [
+            {
+                "source": "literature",
+                "entry_id": null,
+                "adsorbate": "H",
+                "adsorbent": {
+                    "composition": "U",
+                    "surface": "110",
+                    "miller_indices": "(110)",
+                    "adsorption_site": "Lb",
+                    "space_group": null,
+                    "is_most_stable_site": null,
+                },
+                "adsorption_energy": -3.674,
+                "units": "eV/f.u.",
+                "computational_settings": {
+                    "software": "CASTEP",
+                    "kpoint_mesh": [6, 6, 1],
+                    "xc_functional": "PBE",
+                    "energy_cutoff": "520",
+                    "force_cutoff": "0.03",
+                    "convergence_criteria": "1e-6",
+                },
+                "experimental_conditions": {"temperature": null, "pressure": null},
+                "metadata": {
+                    "doi": "doi.org/10.3390/atoms13020009",
+                    "authors": [
+                        "Wang, X., Guan, M., You, D., Xie, D., Hou, M., & Leng, Y."
+                    ],
+                    "year": 2025,
+                },
+            }
+        ]
+    },
+]
