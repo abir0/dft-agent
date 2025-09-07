@@ -1,7 +1,7 @@
 from datetime import datetime
 from pathlib import Path
 
-from langchain_community.tools import DuckDuckGoSearchResults
+from ddgs import DDGS
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import (
@@ -9,8 +9,9 @@ from langchain_core.runnables import (
     RunnableLambda,
     RunnableSerializable,
 )
+from langchain_core.tools import tool
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import END, MessagesState, StateGraph
+from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
 from backend.agents.llm import get_model, settings
@@ -24,8 +25,27 @@ class AgentState(MessagesState, total=False):
     """
 
 
-# Add the tools
-web_search = DuckDuckGoSearchResults(name="WebSearch")
+# Create web search tool using ddgs
+@tool
+def web_search(query: str) -> str:
+    """Search the web using DuckDuckGo. Use this tool to find current information or answer questions that require up-to-date data."""
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=5))
+            if not results:
+                return f"No results found for query: {query}"
+
+            formatted_results = []
+            for result in results:
+                title = result.get('title', 'No title')
+                body = result.get('body', 'No description')
+                href = result.get('href', 'No link')
+                formatted_results.append(f"**{title}**\n{body}\n{href}\n")
+
+            return "\n".join(formatted_results)
+    except Exception as e:
+        return f"Error searching for '{query}': {str(e)}"
+
 tools = [web_search, calculator, python_repl]
 
 # System message
@@ -111,9 +131,6 @@ workflow.add_conditional_edges(
     tools_condition,
 )
 workflow.add_edge("tools", "chatbot")
-workflow.add_edge("chatbot", END)
 
 # Compile the graph
-chatbot = workflow.compile(
-    checkpointer=MemorySaver(),
-)
+chatbot = workflow.compile(checkpointer=MemorySaver())
