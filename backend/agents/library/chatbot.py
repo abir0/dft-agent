@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from pathlib import Path
 
@@ -50,24 +51,44 @@ def web_search(query: str) -> str:
 # Initialize base tools
 base_tools = [web_search, calculator, python_repl]
 
-# Try to load Asta MCP tools
-try:
-    import asyncio
-    # Get specific Asta tools we want to use
-    asta_tool_names = [
-        "search_papers_by_relevance",
-        "search_paper_by_title", 
-        "get_papers",
-        "get_citations",
-        "search_authors_by_name",
-        "get_author_papers"
-    ]
-    asta_tools = asyncio.run(get_specific_asta_tools(asta_tool_names))
-    tools = base_tools + asta_tools
-    print(f"Loaded {len(asta_tools)} Asta MCP tools")
-except Exception as e:
-    print(f"Warning: Could not load Asta MCP tools: {e}")
-    tools = base_tools
+# Global variable to cache loaded tools
+_all_tools = None
+_asta_tools_loaded = False
+
+async def get_all_tools():
+    """Get all tools including Asta MCP tools with proper async handling."""
+    global _all_tools, _asta_tools_loaded
+    
+    if _all_tools is not None:
+        return _all_tools
+    
+    # Start with base tools
+    _all_tools = base_tools.copy()
+    
+    # Try to load Asta MCP tools
+    if not _asta_tools_loaded:
+        try:
+            asta_tool_names = [
+                "search_papers_by_relevance",
+                "search_paper_by_title", 
+                "get_papers",
+                "get_citations",
+                "search_authors_by_name",
+                "get_author_papers"
+            ]
+            asta_tools = await get_specific_asta_tools(asta_tool_names)
+            _all_tools.extend(asta_tools)
+            _asta_tools_loaded = True
+            print(f"Loaded {len(asta_tools)} Asta MCP tools")
+        except Exception as e:
+            print(f"Warning: Could not load Asta MCP tools: {e}")
+            _asta_tools_loaded = True  # Mark as attempted to avoid retrying
+    
+    return _all_tools
+
+# For now, start with base tools only
+# Asta tools will be loaded lazily when the agent runs
+tools = base_tools
 
 # System message
 current_date = datetime.now().strftime("%B %d, %Y")
@@ -105,8 +126,9 @@ instructions = f"""
     """
 
 
-def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, AIMessage]:
-    model = model.bind_tools(tools)
+async def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, AIMessage]:
+    all_tools = await get_all_tools()
+    model = model.bind_tools(all_tools)
     preprocessor = RunnableLambda(
         lambda state: [SystemMessage(content=instructions)] + state["messages"],
         name="StateModifier",
@@ -116,7 +138,7 @@ def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, AIMessa
 
 async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
     m = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-    model_runnable = wrap_model(m)
+    model_runnable = await wrap_model(m)
     response = await model_runnable.ainvoke(state, config)
 
     # We return a list, because this will get added to the existing list
@@ -138,26 +160,61 @@ def handle_tool_error(state) -> dict:
     }
 
 
-def create_tool_node_with_fallback(tools: list) -> dict:
-    return ToolNode(tools).with_fallbacks(
+async def create_tool_node_with_fallback() -> dict:
+    all_tools = await get_all_tools()
+    return ToolNode(all_tools).with_fallbacks(
         [RunnableLambda(handle_tool_error)], exception_key="error"
     )
 
 
-# Define the graph
-workflow = StateGraph(AgentState)
+async def create_chatbot_workflow():
+    """Create the chatbot workflow with all tools loaded."""
+    # Define the graph
+    workflow = StateGraph(AgentState)
+    
+    # Define nodes
+    workflow.add_node("chatbot", acall_model)
+    workflow.add_node("tools", await create_tool_node_with_fallback())
+    
+    # Define edges
+    workflow.set_entry_point("chatbot")
+    workflow.add_conditional_edges(
+        "chatbot",
+        tools_condition,
+    )
+    workflow.add_edge("tools", "chatbot")
+    
+    # Compile the graph
+    return workflow.compile(checkpointer=MemorySaver())
 
-# Define nodes
-workflow.add_node("chatbot", acall_model)
-workflow.add_node("tools", create_tool_node_with_fallback(tools))
+# Create a synchronous wrapper that initializes the workflow lazily
+class LazyWorkflow:
+    def __init__(self):
+        self._workflow = None
+    
+    async def get_workflow(self):
+        if self._workflow is None:
+            self._workflow = await create_chatbot_workflow()
+        return self._workflow
+    
+    async def ainvoke(self, *args, **kwargs):
+        workflow = await self.get_workflow()
+        return await workflow.ainvoke(*args, **kwargs)
+    
+    async def astream(self, *args, **kwargs):
+        workflow = await self.get_workflow()
+        return workflow.astream(*args, **kwargs)
+    
+    def __getattr__(self, name):
+        # For any other methods, delegate to the workflow once it's created
+        async def async_method(*args, **kwargs):
+            workflow = await self.get_workflow()
+            method = getattr(workflow, name)
+            if asyncio.iscoroutinefunction(method):
+                return await method(*args, **kwargs)
+            else:
+                return method(*args, **kwargs)
+        return async_method
 
-# Define edges
-workflow.set_entry_point("chatbot")
-workflow.add_conditional_edges(
-    "chatbot",
-    tools_condition,
-)
-workflow.add_edge("tools", "chatbot")
-
-# Compile the graph
-chatbot = workflow.compile(checkpointer=MemorySaver())
+# Create the lazy workflow instance
+chatbot = LazyWorkflow()
