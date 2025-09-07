@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     USE_FAKE_MODEL: bool = False
 
     # If DEFAULT_MODEL is None, it will be set in model_post_init
-    DEFAULT_MODEL: AllModelEnum | None = OpenAIModelName.GPT_4O  # type: ignore[assignment]
+    DEFAULT_MODEL: AllModelEnum | None = OpenAIModelName.GPT_5  # type: ignore[assignment]
     AVAILABLE_MODELS: set[AllModelEnum] = set()  # type: ignore[assignment]
 
     MP_API_KEY: SecretStr | None = None
@@ -72,7 +72,7 @@ class Settings(BaseSettings):
             match provider:
                 case Provider.OPENAI:
                     if self.DEFAULT_MODEL is None:
-                        self.DEFAULT_MODEL = OpenAIModelName.GPT_4O
+                        self.DEFAULT_MODEL = OpenAIModelName.GPT_5
                     self.AVAILABLE_MODELS.update(set(OpenAIModelName))
                 case Provider.GROQ:
                     if self.DEFAULT_MODEL is None:
