@@ -59,6 +59,7 @@ def _parse_input(user_input: UserInput) -> tuple[dict[str, Any], UUID]:
         "config": RunnableConfig(
             configurable=configurable,
             run_id=run_id,
+            recursion_limit=50,
         ),
     }
     return kwargs, run_id
