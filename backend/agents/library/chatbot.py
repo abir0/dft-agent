@@ -203,18 +203,26 @@ class LazyWorkflow:
     
     async def astream(self, *args, **kwargs):
         workflow = await self.get_workflow()
-        return workflow.astream(*args, **kwargs)
+        async for event in workflow.astream(*args, **kwargs):
+            yield event
+    
+    async def astream_events(self, *args, **kwargs):
+        workflow = await self.get_workflow()
+        async for event in workflow.astream_events(*args, **kwargs):
+            yield event
     
     def __getattr__(self, name):
         # For any other methods, delegate to the workflow once it's created
-        async def async_method(*args, **kwargs):
-            workflow = await self.get_workflow()
-            method = getattr(workflow, name)
-            if asyncio.iscoroutinefunction(method):
-                return await method(*args, **kwargs)
-            else:
-                return method(*args, **kwargs)
-        return async_method
+        def method_wrapper(*args, **kwargs):
+            async def async_method():
+                workflow = await self.get_workflow()
+                method = getattr(workflow, name)
+                if asyncio.iscoroutinefunction(method):
+                    return await method(*args, **kwargs)
+                else:
+                    return method(*args, **kwargs)
+            return async_method()
+        return method_wrapper
 
 # Create the lazy workflow instance
 chatbot = LazyWorkflow()
