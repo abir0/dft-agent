@@ -110,6 +110,7 @@ instructions = f"""
     - Use the get_papers tool to get detailed information about specific papers using their ID.
     - Use the get_citations tool to find papers that cite a specific paper.
     - Use the search_authors_by_name and get_author_papers tools to find papers by specific researchers.
+    - If Asta scientific paper search tools return 403 Forbidden errors, inform the user that there may be an API key permission issue and suggest using web search instead.
     - Please include markdown-formatted links to any citations used in your response. Only include one
     or two citations per response unless more are needed. ONLY USE LINKS RETURNED BY THE TOOLS.
     - Use calculator tool with numexpr to answer math questions. The user does not understand numexpr,
