@@ -16,6 +16,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 
 from backend.agents.llm import get_model, settings
 from backend.agents.tools import calculator, python_repl
+from backend.agents.asta_mcp_client import get_specific_asta_tools
 
 
 class AgentState(MessagesState, total=False):
@@ -46,7 +47,27 @@ def web_search(query: str) -> str:
     except Exception as e:
         return f"Error searching for '{query}': {str(e)}"
 
-tools = [web_search, calculator, python_repl]
+# Initialize base tools
+base_tools = [web_search, calculator, python_repl]
+
+# Try to load Asta MCP tools
+try:
+    import asyncio
+    # Get specific Asta tools we want to use
+    asta_tool_names = [
+        "search_papers_by_relevance",
+        "search_paper_by_title", 
+        "get_papers",
+        "get_citations",
+        "search_authors_by_name",
+        "get_author_papers"
+    ]
+    asta_tools = asyncio.run(get_specific_asta_tools(asta_tool_names))
+    tools = base_tools + asta_tools
+    print(f"Loaded {len(asta_tools)} Asta MCP tools")
+except Exception as e:
+    print(f"Warning: Could not load Asta MCP tools: {e}")
+    tools = base_tools
 
 # System message
 current_date = datetime.now().strftime("%B %d, %Y")
@@ -54,7 +75,8 @@ images_dir = f"{settings.ROOT_PATH}/data/images"
 Path(images_dir).mkdir(parents=True, exist_ok=True)
 
 instructions = f"""
-    You are a helpful chat assistant with the ability to search the web and use other tools.
+    You are a helpful chat assistant with expertise in materials science and DFT calculations,
+    with the ability to search the web, search scientific literature, and use other tools.
     Today's date is {current_date}.
 
     NOTE: THE USER CAN'T SEE THE TOOL RESPONSE.
@@ -62,6 +84,11 @@ instructions = f"""
     A few things to remember:
     - When searching, be persistent. Expand your query bounds if the first search returns no results.
     - If a search comes up empty, expand your search before giving up.
+    - Use the search_papers_by_relevance tool to find peer-reviewed scientific literature by keyword.
+    - Use the search_paper_by_title tool to find specific papers by their title.
+    - Use the get_papers tool to get detailed information about specific papers using their ID.
+    - Use the get_citations tool to find papers that cite a specific paper.
+    - Use the search_authors_by_name and get_author_papers tools to find papers by specific researchers.
     - Please include markdown-formatted links to any citations used in your response. Only include one
     or two citations per response unless more are needed. ONLY USE LINKS RETURNED BY THE TOOLS.
     - Use calculator tool with numexpr to answer math questions. The user does not understand numexpr,
