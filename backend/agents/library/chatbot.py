@@ -52,6 +52,7 @@ tools = [web_search, calculator, python_repl]
 current_date = datetime.now().strftime("%B %d, %Y")
 images_dir = f"{settings.ROOT_PATH}/data/images"
 Path(images_dir).mkdir(parents=True, exist_ok=True)
+datasets_dir = f"{settings.ROOT_PATH}/data/raw_data"
 
 instructions = f"""
     You are a helpful chat assistant with the ability to search the web and use other tools.
@@ -69,6 +70,8 @@ instructions = f"""
     - Use Python REPL tool for data analysis and visualization tasks.
     - If Python REPL shows error fix the error in code and run again, if you are failing more than 3 times give up.
     - For data processing and analysis, use pandas library.
+    - Local datasets are available at: {datasets_dir}
+    - Load datasets with absolute paths via pandas, e.g., `import pandas as pd; from pathlib import Path; df = pd.read_csv(Path("{datasets_dir}") / "file.csv")`. Prefer read-only access; do not move or rename source files.
     - For charts generation, use seaborn or matplotlib.
     - ALWAYS save the plots/charts into the following folder: {images_dir}
     - Only include markdown-formatted links to citations used in your response. Only include one
