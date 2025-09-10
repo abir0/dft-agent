@@ -1,6 +1,7 @@
 # Local data & logs
 /data/
 /workspaces/
+WORKSPACE/
 weaviate_data/
 faiss_index/
 logs/

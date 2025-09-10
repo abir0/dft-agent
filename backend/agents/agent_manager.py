@@ -3,9 +3,10 @@ from dataclasses import dataclass
 from langgraph.graph.state import CompiledStateGraph
 
 from backend.agents.library.chatbot import chatbot
+from backend.agents.library.dft_agent.agent import dft_agent
 from backend.core import AgentInfo
 
-DEFAULT_AGENT = "chatbot"
+DEFAULT_AGENT = "dft_agent"
 
 
 @dataclass
@@ -16,6 +17,10 @@ class Agent:
 
 agents: dict[str, Agent] = {
     "chatbot": Agent(description="A simple chatbot", graph=chatbot),
+    "dft_agent": Agent(
+        description="Expert DFT agent for computational materials science workflows",
+        graph=dft_agent,
+    ),
 }
 
 
