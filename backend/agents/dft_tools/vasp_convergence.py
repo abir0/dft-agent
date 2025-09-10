@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import List, Dict, Any, Tuple
+from typing import Union, List, Tuple, Dict, Any, Optional
 
 from langchain_core.tools import tool
 
@@ -32,8 +32,9 @@ def converge_encut(
     struct: str,
     workdir: str,
     encut_list: List[int],
-    kpts: str | List[int] | Tuple[int,int,int] = "4x4x4",
-    natoms: int | None = None,
+    *,
+    kpts: Union[str, List[int], Tuple[int,int,int]] = "4x4x4",
+    natoms: Optional[int] = None,
     tol_mev: float = 1.0,
     ismear: int = 1,
     sigma: float = 0.2,
@@ -100,9 +101,10 @@ def converge_encut(
 def converge_kpoints(
     struct: str,
     workdir: str,
-    kpt_list: List[str | List[int] | Tuple[int,int,int]],
+    kpt_list: List[Union[str, List[int], Tuple[int,int,int]]],
     encut: int,
-    natoms: int | None = None,
+    *,
+    natoms: Union[int, None] = None,
     tol_mev: float = 1.0,
     ismear: int = 1,
     sigma: float = 0.2,
