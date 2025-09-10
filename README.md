@@ -57,7 +57,7 @@ dft-agent/
 
 ### LLM Integrations
 
-- **OpenAI GPT Models**: GPT-4, GPT-3.5-turbo
+- **OpenAI GPT Models**: e.g. GPT-4, GPT-4o mini, GPT-5, etc.
 - **Groq**: High-speed inference
 - **Ollama**: Local model deployment
 - **HuggingFace**: Open-source model access
@@ -149,7 +149,7 @@ import httpx
 # Chat with the agent
 response = httpx.post("http://localhost:8000/chat", json={
     "message": "What is the band gap of silicon?",
-    "model": "gpt-4",
+    "model": "-4",
     "agent": "chatbot"
 })
 
@@ -170,8 +170,8 @@ Edit `backend/core/models.py` to add new LLM providers or models:
 ```python
 class OpenAIModelName(str, Enum):
     GPT_4 = "gpt-4"
-    GPT_4_TURBO = "gpt-4-turbo"
-    GPT_3_5_TURBO = "gpt-3.5-turbo"
+    GPT_4O_MINI = "gpt-4o-mini"
+    GPT_5= "gpt-5"
 ```
 
 ### Agent Configuration
