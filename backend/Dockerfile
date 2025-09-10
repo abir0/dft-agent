@@ -14,6 +14,6 @@ RUN pip install --no-cache-dir uv
 RUN uv sync --frozen --no-install-project --no-dev
 
 # Copy source files
-COPY backend/ .
+COPY backend/ ./backend
 
-CMD ["python", "run_service.py"]
+CMD ["python", "-m", "backend.run_service"]
