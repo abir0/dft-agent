@@ -37,14 +37,15 @@ def web_search(query: str) -> str:
 
             formatted_results = []
             for result in results:
-                title = result.get('title', 'No title')
-                body = result.get('body', 'No description')
-                href = result.get('href', 'No link')
+                title = result.get("title", "No title")
+                body = result.get("body", "No description")
+                href = result.get("href", "No link")
                 formatted_results.append(f"**{title}**\n{body}\n{href}\n")
 
             return "\n".join(formatted_results)
     except Exception as e:
         return f"Error searching for '{query}': {str(e)}"
+
 
 tools = [web_search, calculator, python_repl]
 
