@@ -27,14 +27,25 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 from streamlit.runtime.scriptrunner import get_script_run_ctx
-
-from backend.agents.client import AgentClient, AgentClientError
+import copy
+from plan_helpers import validate_plan_schema, diff_plans
+from agents.client import AgentClient, AgentClientError
 from backend.core.schema import ChatHistory, ChatMessage
+import json
+import requests
 
 # Title and icon for head
 APP_TITLE = "AI Agent Interface"
-APP_ICON = "frontend/static/logo.svg"
+APP_DIR = Path(__file__).parent
+APP_ICON =APP_DIR/"static"/"logo.svg"
 
+def fetch_plan(base_url: str, req: str, hints: dict | None = None, code: dict | None = None,history: list | None = None) -> dict:
+    """Call the backend planner and return {request, plan, workroot}."""
+    url = f"{base_url.rstrip('/')}/dft-planner/plan"
+    payload = {"request": req, "hints": hints or {}, "code": code or {}, "history": history or []}
+    r = requests.post(url, json=payload, timeout=120)
+    r.raise_for_status()
+    return r.json()
 
 # Utility functions
 def img_to_bytes(img_path: str) -> bytes:
@@ -64,6 +75,60 @@ def replace_img_tag(html_content: str) -> str:
         html_content,
         flags=re.IGNORECASE,
     )
+
+def plan_to_markdown(plan: dict) -> str:
+    """Turn planner JSON into a readable outline."""
+    if not isinstance(plan, dict):
+        return "*(Invalid plan format)*"
+
+    out = []
+    goal = plan.get("goal")
+    if goal:
+        out.append(f"**Goal:** {goal}\n")
+
+    assumptions = plan.get("assumptions") or []
+    if assumptions:
+        out.append("**Assumptions**")
+        for a in assumptions:
+            out.append(f"- {a}")
+        out.append("")
+
+    inputs = plan.get("inputs_summary") or {}
+    if inputs:
+        out.append("**Inputs**")
+        for k, v in inputs.items():
+            out.append(f"- **{k}**: {v}")
+        out.append("")
+
+    steps = plan.get("steps") or []
+    if steps:
+        out.append("**Plan**")
+        for i, s in enumerate(steps, 1):
+            tool = s.get("tool", "<?>")
+            args = s.get("args", {})
+            explain = s.get("explain", "")
+            # concise args rendering
+            arg_pairs = ", ".join(f"{k}={v}" for k, v in args.items())
+            line = f"{i}. **{tool}**({arg_pairs})"
+            if explain:
+                line += f" — {explain}"
+            out.append(line)
+        out.append("")
+
+    artifacts = plan.get("artifacts") or []
+    if artifacts:
+        out.append("**Artifacts**")
+        for a in artifacts:
+            out.append(f"- {a}")
+        out.append("")
+
+    crit = plan.get("success_criteria") or []
+    if crit:
+        out.append("**Success criteria**")
+        for c in crit:
+            out.append(f"- {c}")
+
+    return "\n".join(out).strip()
 
 
 async def main() -> None:
@@ -102,6 +167,7 @@ async def main() -> None:
         try:
             with st.spinner("Connecting to agent service..."):
                 st.session_state.agent_client = AgentClient(base_url=agent_url)
+                st.session_state.agent_url = agent_url
         except AgentClientError as e:
             st.error(f"Error connecting to agent service at {agent_url}: {e}")
             st.markdown("The service might be booting up. Try again in a few seconds.")
@@ -123,6 +189,11 @@ async def main() -> None:
                 messages = []
         st.session_state.messages = messages
         st.session_state.thread_id = thread_id
+
+        if "last_plan" not in st.session_state:
+            st.session_state.last_plan = None
+        if "edited_plan" not in st.session_state:
+            st.session_state.edited_plan = None
 
     # Config options
     with st.sidebar:
@@ -155,7 +226,12 @@ async def main() -> None:
                 index=agent_idx,
             )
             use_streaming = st.toggle("Stream results", value=True)
-
+        st.markdown("----")
+        use_planner = st.toggle(
+            "Planner mode",
+            value = False,
+            help="When on, your message goes to /dft-planner/plan and the JSON plan is shown.")
+        code_choice = st.selectbox("DFT code for planning", ["qe", "vasp"], index=0)
         with st.popover(":material/policy: Privacy", use_container_width=True):
             st.write(
                 "Prompts, responses and feedback in this app are anonymously recorded for evaluation and improvement purposes."
@@ -204,27 +280,124 @@ async def main() -> None:
         messages.append(ChatMessage(type="human", content=user_input))
         st.chat_message("human").write(user_input)
         try:
-            if use_streaming:
-                stream = agent_client.astream(
-                    message=user_input,
-                    model=model,
-                    thread_id=st.session_state.thread_id,
-                )
-                await draw_messages(stream, is_new=True)
+            if use_planner:
+                RECENCY_WINDOW = 6
+                base_url = st.session_state.get("agent_url") or os.getenv("AGENT_URL") or "http://localhost:8080"
+                history_dicts = [msg.model_dump() for msg in st.session_state.messages]
+                relevant_history= history_dicts[-RECENCY_WINDOW:]
+                result = fetch_plan(base_url, user_input, hints=None, code={"code": code_choice},
+                                    history = relevant_history)
+                plan = result.get("plan", {})
+                workroot = result.get("workroot", "")
+                # keep originals for diff / reset
+                st.session_state.last_plan = copy.deepcopy(plan)
+                st.session_state.edited_plan = None
+
+                pretty = plan_to_markdown(plan)
+
+                plan_md = "**Plan generated**  \n"
+                if workroot:
+                    plan_md += f"_Workspace_: `{workroot}`\n\n"
+                plan_md += pretty
+
+                plan_msg = ChatMessage(type="ai", content=plan_md)
+                messages.append(plan_msg)
+                st.rerun()
             else:
-                response = await agent_client.ainvoke(
-                    message=user_input,
-                    model=model,
-                    thread_id=st.session_state.thread_id,
-                )
-                messages.append(response)
-                st.chat_message("ai").write(response.content)
-            st.rerun()  # Clear stale containers
+                if use_streaming:
+                    stream = agent_client.astream(
+                        message=user_input,
+                        model=model,
+                        thread_id=st.session_state.thread_id,
+                    )
+                    await draw_messages(stream, is_new=True)
+                else:
+                    response = await agent_client.ainvoke(
+                        message=user_input,
+                        model=model,
+                        thread_id=st.session_state.thread_id,
+                    )
+                    messages.append(response)
+                    st.chat_message("ai").write(response.content)
+                st.rerun()
         except AgentClientError as e:
             st.error(f"Error generating response: {e}")
             st.stop()
+        except Exception as e:
+            st.error(f"Planner error: {e}")
+            st.stop()
 
-    # If messages have been generated, show feedback widget
+    if st.session_state.get("last_plan"):
+        if len(messages) > 0 and messages[-1].type == "ai":
+            with st.chat_message("ai"):
+                plan_to_show = st.session_state.get("edited_plan") or st.session_state.get("last_plan")
+                st.markdown(plan_to_markdown(plan_to_show))
+            with st.expander("Edit plan JSON", expanded=True):  #
+                default_text = json.dumps(plan_to_show, indent=2)  #
+                plan_text = st.text_area(  #
+                    "Tweak and validate",  #
+                    default_text,  #
+                    key=f"edit_plan_{len(messages)}",  #
+                    height=340,  #
+                )  #
+                cols = st.columns([1, 1, 1, 2])  #
+                with cols[0]:  #
+                    # --- This button logic now contains the complete fix ---
+                    if st.button("Validate edits"):  #
+                        try:  #
+                            candidate = json.loads(plan_text)  #
+                            errs = validate_plan_schema(candidate)  #
+                            if errs:  #
+                                st.error("Found issues:\n- " + "\n- ".join(errs))  #
+                            else:  #
+                                st.session_state.edited_plan = candidate  #
+                                diffs = diff_plans(st.session_state.last_plan, candidate)  #
+                                if diffs:  #
+                                    st.success("Valid JSON Changes:\n- " + "\n- ".join(diffs))  #
+                                else:  #
+                                    st.success("Valid JSON (no changes)")  #
+
+                                # THE FIX: Update message content and rerun to show the changes
+                                new_plan_md = plan_to_markdown(candidate)
+                                st.session_state.messages[-1].content = new_plan_md
+                                st.rerun()
+
+                        except Exception as e:  #
+                            st.error(f"Invalid JSON: {e}")  #
+
+                with cols[1]:  #
+                    if st.button("Reset edits"):  #
+                        st.session_state.edited_plan = None  #
+                        # Also reset the message content to the original plan
+                        original_plan_md = plan_to_markdown(st.session_state.last_plan)
+                        st.session_state.messages[-1].content = original_plan_md
+                        st.rerun()  #
+
+                with cols[2]:  #
+                    download_obj = st.session_state.edited_plan or st.session_state.last_plan  #
+                    st.download_button(  #
+                        "Download JSON",  #
+                        data=json.dumps(download_obj or {}, indent=2),  #
+                        file_name="dft_plan.json",  #
+                        mime="application/json",  #
+                    )  #
+
+            # Dry run (no backend execution) to show step list and catch issues
+            with st.expander("Dry run (no execution)"):  #
+                plan_use = st.session_state.edited_plan or st.session_state.last_plan  #
+                problems = validate_plan_schema(plan_use)  #
+                if problems:  #
+                    st.error("Please fix these before running:\n\n- " + "\n- ".join(problems))  #
+                else:  #
+                    st.success("Plan looks consistent")  #
+                    for idx, step in enumerate(plan_use.get("steps", []), 1):  #
+                        tool = step.get("tool")  #
+                        args = step.get("args", {})  #
+                        arg_str = ", ".join(f"{k}={v}" for k, v in args.items())  #
+                        st.write(f"{idx}. **{tool}**({arg_str})")  #
+                    st.caption("Simulation only—no DFT jobs submitted.")
+
+                    # If messages have been generated, show feedback widget
     if len(messages) > 0 and st.session_state.last_message:
         with st.session_state.last_message:
             await handle_feedback()

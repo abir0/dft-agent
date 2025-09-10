@@ -12,7 +12,7 @@ from backend.agents import DEFAULT_AGENT, get_agent, get_all_agent_info
 from backend.api.endpoints import agent
 from backend.core import ServiceMetadata
 from backend.settings import settings
-
+from backend.api.endpoints import dft_planner
 warnings.filterwarnings("ignore", category=LangChainBetaWarning)
 
 
@@ -81,3 +81,4 @@ async def info() -> ServiceMetadata:
 
 # Register API endpoints
 app.include_router(agent.router)
+app.include_router(dft_planner.router)
