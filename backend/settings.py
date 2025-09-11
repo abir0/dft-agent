@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     AVAILABLE_MODELS: set[AllModelEnum] = set()  # type: ignore[assignment]
 
     MP_API_KEY: SecretStr | None = None
+    ASTA_KEY: SecretStr | None = None
 
     # Database settings
     DATABASE_URL: str = ""
