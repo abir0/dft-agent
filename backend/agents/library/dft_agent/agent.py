@@ -150,6 +150,9 @@ CAPABILITIES / TOOL GROUPS:
 STATE (use sparingly / reference, do NOT dump raw): working_directory, current_structures (<=5), last_calculation, current_workflow, workflow_step.
 
 WORKSPACE: All user-specific files live under {settings.ROOT_PATH}/WORKSPACE/<thread_id>/ with subfolders (structures/, calculations/, results/, convergence/, db/).
+Always use the working_directory from state for all file operations.
+If thread_id is available, provide it when calling tools to ensure correct workspace usage.
+Provide absolute path for any file arguments.
 
 PROCESS (follow unless user explicitly wants ad-hoc answer):
  Step 0: Clarify goal (if ambiguous) otherwise restate it concisely.
