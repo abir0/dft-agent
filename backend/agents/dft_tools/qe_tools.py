@@ -172,6 +172,8 @@ def generate_qe_input(
 
         pseudo_dir = f"{settings.ROOT_PATH}/WORKSPACE/pseudos"
 
+        lspinorb = any("rel" in pp for pp in pseudopotentials.values())
+
         # QE input data dictionary
         input_data = {
             "control": {
@@ -191,7 +193,8 @@ def generate_qe_input(
                 "ecutrho": ecutrho,
                 "occupations": occupations,
                 "input_dft": input_dft,
-                "lspinorb": True if "rel" in pseudopotentials else False,
+                "lspinorb": lspinorb,
+                "noncolin": lspinorb,
             },
             "electrons": {
                 "conv_thr": 1e-8,
