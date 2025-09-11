@@ -377,5 +377,6 @@ class LazyWorkflow:
 
         return method_wrapper
 
+
 # Create the lazy workflow instance
 chatbot = LazyWorkflow()

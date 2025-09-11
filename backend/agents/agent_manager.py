@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 from langgraph.graph.state import CompiledStateGraph
+
 from backend.core import AgentInfo
 
 DEFAULT_AGENT = "dft_agent"
@@ -22,19 +23,18 @@ class AgentConfig:
 
 def _create_chatbot():
     from backend.agents.library.chatbot import chatbot
+
     return chatbot
 
 
 def _create_dft_agent():
     from backend.agents.library.dft_agent.agent import dft_agent
+
     return dft_agent
 
 
 agent_configs: dict[str, AgentConfig] = {
-    "chatbot": AgentConfig(
-        description="A simple chatbot", 
-        factory=_create_chatbot
-    ),
+    "chatbot": AgentConfig(description="A simple chatbot", factory=_create_chatbot),
     "dft_agent": AgentConfig(
         description="Expert DFT agent for computational materials science workflows",
         factory=_create_dft_agent,
