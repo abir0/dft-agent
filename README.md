@@ -1,4 +1,4 @@
-# DFT Agent
+# SurfScriptors - LLM-powered DFT Agent Workflow Automation for Surface Science
 
 An intelligent, tool-rich agent system for autonomous materials research and Density Functional Theory (DFT) workflows. Built with LangGraph (graph-based agent orchestration) and FastAPI, featuring persistent conversation state, structured workspaces, and an extensible tool registry for real computational tasks (structure generation, QE input creation, convergence testing, job submission, database storage, etc.).
 
