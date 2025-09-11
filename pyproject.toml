@@ -20,6 +20,7 @@ dependencies = [
     "langchain-experimental",
     "langchain-huggingface",
     "langchain-groq",
+    "langchain-mcp-adapters",
     "langchain-ollama",
     "langchain-openai",
     "langgraph",
@@ -37,6 +38,7 @@ dependencies = [
     "python-dotenv",
     "python-multipart",
     "requests",
+    "pypdf",
     "seaborn",
     "seekpath",
     "setuptools",
@@ -46,7 +48,6 @@ dependencies = [
     "typing-extensions",
     "uvicorn",
     "langchain-mcp-adapters>=0.1.9",
-    "pypdf",
 ]
 
 [dependency-groups]
@@ -59,7 +60,8 @@ client = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
+exclude = ["dist", "build", "scripts", "data", "logs", "WORKSPACE", ".venv"]
 
 [tool.uv]
 dev-dependencies = [

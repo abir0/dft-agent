@@ -22,3 +22,9 @@ build/
 *.swo
 .langgraph_api
 .ruff_cache
+*.log
+*.tmp
+*.tar.gz
+*.DS_Store
+logs/
+WORKSPACE/

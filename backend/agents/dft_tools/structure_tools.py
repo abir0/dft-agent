@@ -6,13 +6,15 @@ Core tools for generating and manipulating atomic structures using ASE.
 
 import json
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 from ase import Atoms
 from ase.build import add_adsorbate as ase_add_adsorbate
 from ase.build import bulk, molecule, surface
 from ase.io import read, write
 from langchain_core.tools import tool
+from pymatgen.io.ase import AseAtomsAdaptor
+from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 from backend.utils.workspace import get_subdir_path
 
@@ -27,72 +29,105 @@ def generate_bulk(
     cubic: bool = False,
     _thread_id: Optional[str] = None,
 ) -> str:
-    """Build bulk unit cell structure from element and crystal type.
+    """
+    Build bulk unit-cell structure from element and crystal type.
 
-    Args:
-        element: Chemical element symbol (e.g., 'Cu', 'Al', 'Pt')
-        crystal: Crystal structure type ('fcc', 'bcc', 'hcp', 'diamond', 'zincblende', 'rocksalt', 'cesiumchloride', 'fluorite', 'wurtzite')
-        a: Lattice parameter in Angstrom
-        c_over_a: c/a ratio for hexagonal structures (default: ideal ratio)
-        orthorhombic: Use orthorhombic unit cell for fcc and bcc
-        cubic: Use cubic unit cell
+    Args
+    ----
+    element : str
+        Chemical element symbol (e.g. 'Cu', 'Al', 'Pt')
+    crystal : str
+        Crystal prototype name recognised by pymatgen/ASE:
+        fcc, bcc, hcp, diamond, "zincblende", "rocksalt", ...
+    a : float
+        Lattice parameter (Å).
+    c_over_a : float, optional
+        c/a ratio for hexagonal systems (ignored otherwise).
+    orthorhombic : bool
+        Force orthorhombic setting (fcc/bcc only).
+    cubic : bool
+        Force cubic setting.
+    _thread_id : str, optional
+        Workspace identifier used to isolate output directories.
 
-    Returns:
-        String with structure information and file path
+    Returns
+    -------
+    str
+        Human-readable summary.
     """
     try:
-        # Create bulk structure
-        atoms = bulk(
-            element,
-            crystal,
-            a=a,
-            c=c_over_a * a if c_over_a else None,
-            orthorhombic=orthorhombic,
-            cubic=cubic,
-        )
+        # Create the structure
+        if crystal:
+            atoms = bulk(
+                element,
+                crystal,
+                a=a,
+                c=c_over_a * a if c_over_a else None,
+                orthorhombic=orthorhombic,
+                cubic=cubic,
+            )
 
-        # Get workspace-specific output directory
-        if _thread_id:
-            output_dir = get_subdir_path(_thread_id, "structures/bulk")
-        else:
-            # Fallback to outputs directory if no thread_id
-            output_dir = Path("data/outputs/structures/bulk")
-            output_dir.mkdir(parents=True, exist_ok=True)
+        # Canonicalise via pymatgen
+        pmg_struct = AseAtomsAdaptor.get_structure(atoms)
+        sga = SpacegroupAnalyzer(pmg_struct, symprec=1e-3)
+        primitive = sga.get_primitive_standard_structure()
+        conventional = sga.get_conventional_standard_structure()
 
-        # Generate filename
-        filename = f"{element}_{crystal}_a{a:.2f}"
+        # File paths
+        output_dir = get_subdir_path(_thread_id, "structures/bulk")
+
+        stem = f"{element}_{crystal}_a{a:.2f}"
         if c_over_a:
-            filename += f"_c{c_over_a:.2f}"
-        filename += ".cif"
+            stem += f"_c{c_over_a:.2f}"
 
-        filepath = output_dir / filename
+        cif_path = output_dir / f"{stem}.cif"
+        json_path = cif_path.with_suffix(".json")
+        xyz_path = cif_path.with_suffix(".xyz")
+        poscar_path = cif_path.with_suffix("").with_suffix(".POSCAR")
 
-        # Save structure
-        write(str(filepath), atoms)
+        # Write files
+        primitive.to(str(cif_path), fmt="cif")
+        write(str(xyz_path), atoms)  # ASE xyz
+        conventional.to(str(poscar_path), fmt="poscar")
 
-        # Create metadata
+        # Save metadata
         metadata = {
             "element": element,
             "crystal_structure": crystal,
             "lattice_parameter_a": a,
             "c_over_a": c_over_a,
-            "num_atoms": len(atoms),
-            "cell_volume": atoms.get_volume(),
-            "formula": atoms.get_chemical_formula(),
-            "filepath": str(filepath),
+            "num_atoms_primitive": primitive.num_sites,
+            "num_atoms_conventional": conventional.num_sites,
+            "cell_volume_primitive": primitive.volume,
+            "cell_volume_conventional": conventional.volume,
+            "density_g_cm3": primitive.density,
+            "formula_primitive": primitive.formula,
+            "reduced_formula": primitive.composition.reduced_formula,
+            "space_group_number": sga.get_space_group_number(),
+            "space_group_symbol": sga.get_space_group_symbol(),
+            "point_group": sga.get_point_group_symbol(),
+            "files": {
+                "cif": str(cif_path),
+                "xyz": str(xyz_path),
+                "poscar": str(poscar_path),
+                "metadata": str(json_path),
+            },
         }
 
-        metadata_file = filepath.with_suffix(".json")
-        with open(metadata_file, "w") as f:
-            json.dump(metadata, f, indent=2)
+        with open(json_path, "w") as fd:
+            json.dump(metadata, fd, indent=2)
 
         return (
-            f"Generated {crystal} {element} bulk structure with {len(atoms)} atoms. "
-            f"Lattice parameter a={a:.3f} Å. Saved as {filepath}"
+            f"Generated {crystal} {element} bulk structure "
+            f"({primitive.num_sites} atoms primitive, "
+            f"space-group {sga.get_space_group_number()} "
+            f"{sga.get_space_group_symbol()}). "
+            f"Files saved to: {output_dir} "
+            f"with CIF file: {str(cif_path.name)}"
         )
 
-    except Exception as e:
-        return f"Error generating bulk structure: {str(e)}"
+    except Exception as exc:
+        return f"Error generating bulk structure: {exc}"
 
 
 @tool
@@ -113,38 +148,30 @@ def create_supercell(
         String with supercell information and file path
     """
     try:
-        # Set default scaling matrix if not provided
-        if scaling_matrix is None:
-            scaling_matrix = [2, 2, 2]
-
-        # Read structure
+        # Set structure
         atoms = read(structure_file)
 
         # Create supercell
+        if scaling_matrix is None:
+            scaling_matrix = [2, 2, 2]
         supercell = atoms * scaling_matrix
 
         if wrap_atoms:
             supercell.wrap()
 
-        # Generate output filename
         input_path = Path(structure_file)
 
-        # Use workspace-specific directory if thread_id is available
-        if _thread_id:
-            output_dir = get_subdir_path(_thread_id, "structures/supercells")
-        else:
-            # Fallback to outputs directory
-            output_dir = Path("data/outputs/structures/supercells")
-            output_dir.mkdir(parents=True, exist_ok=True)
+        # Use workspace-specific directory
+        output_dir = get_subdir_path(_thread_id, "structures/supercells")
 
         scale_str = "x".join(map(str, scaling_matrix))
-        output_filename = f"{input_path.stem}_supercell_{scale_str}{input_path.suffix}"
-        output_path = output_dir / output_filename
+        stem = f"{input_path.stem}_supercell_{scale_str}"
+        output_path = output_dir / f"{stem}.cif"
 
         # Save supercell
         write(str(output_path), supercell)
 
-        # Create metadata
+        # Metadata
         metadata = {
             "original_file": structure_file,
             "scaling_matrix": scaling_matrix,
@@ -152,8 +179,8 @@ def create_supercell(
             "supercell_atoms": len(supercell),
             "original_volume": atoms.get_volume(),
             "supercell_volume": supercell.get_volume(),
-            "supercell_formula": supercell.get_chemical_formula(),
-            "filepath": str(output_path),
+            "formula": supercell.get_chemical_formula(),
+            "files": {"cif": str(output_path)},
         }
 
         metadata_file = output_path.with_suffix(".json")
@@ -162,8 +189,8 @@ def create_supercell(
 
         return (
             f"Created {scale_str} supercell with {len(supercell)} atoms "
-            f"(from {len(atoms)} atoms). Volume: {supercell.get_volume():.2f} Å³. "
-            f"Saved as {output_path}"
+            f"(volume {supercell.get_volume():.2f} Å³). "
+            f"Saved to {output_path}"
         )
 
     except Exception as e:
@@ -192,14 +219,12 @@ def generate_slab(
         String with slab information and file path
     """
     try:
-        # Set default miller indices if not provided
-        if miller_indices is None:
-            miller_indices = [1, 1, 1]
-
-        # Read bulk structure
+        # Set up bulk structure
         bulk_atoms = read(structure_file)
 
         # Create slab
+        if miller_indices is None:
+            miller_indices = [1, 1, 1]
         slab = surface(bulk_atoms, miller_indices, layers, vacuum)
 
         if orthogonal:
@@ -208,29 +233,19 @@ def generate_slab(
             cell = slab.get_cell()
             # Simple orthogonalization - may need improvement for complex cases
 
-        # Generate output filename
         input_path = Path(structure_file)
-
-        # Use workspace-specific directory if thread_id is available
-        if _thread_id:
-            output_dir = get_subdir_path(_thread_id, "structures/slabs")
-        else:
-            # Fallback to outputs directory
-            output_dir = Path("data/outputs/structures/slabs")
-            output_dir.mkdir(parents=True, exist_ok=True)
+        output_dir = get_subdir_path(_thread_id, "structures/slabs")
 
         miller_str = "".join(map(str, miller_indices))
-        output_filename = f"{input_path.stem}_slab_{miller_str}_{layers}L_vac{vacuum:.1f}{input_path.suffix}"
-        output_path = output_dir / output_filename
+        stem = f"{input_path.stem}_slab_{miller_str}_{layers}L_vac{vacuum:.1f}"
+        output_path = output_dir / f"{stem}.cif"
 
         # Save slab
         write(str(output_path), slab)
 
-        # Calculate surface area
         cell = slab.get_cell()
         surface_area = abs(cell[0, 0] * cell[1, 1] - cell[0, 1] * cell[1, 0])
 
-        # Create metadata
         metadata = {
             "bulk_file": structure_file,
             "miller_indices": miller_indices,
@@ -240,7 +255,7 @@ def generate_slab(
             "surface_area": surface_area,
             "slab_thickness": cell[2, 2] - vacuum,
             "formula": slab.get_chemical_formula(),
-            "filepath": str(output_path),
+            "files": {"cif": str(output_path)},
         }
 
         metadata_file = output_path.with_suffix(".json")
@@ -248,9 +263,9 @@ def generate_slab(
             json.dump(metadata, f, indent=2)
 
         return (
-            f"Generated ({miller_str}) slab with {layers} layers and {len(slab)} atoms. "
-            f"Surface area: {surface_area:.2f} Å². Vacuum: {vacuum} Å. "
-            f"Saved as {output_path}"
+            f"Generated slab ({miller_str}) with {layers} layers and {len(slab)} atoms. "
+            f"Surface area: {surface_area:.2f} Å², vacuum {vacuum} Å. "
+            f"Saved to {output_path}"
         )
 
     except Exception as e:
@@ -261,8 +276,7 @@ def generate_slab(
 def add_adsorbate(
     slab_file: str,
     adsorbate_formula: str,
-    site_position_x: float = 0.5,
-    site_position_y: float = 0.5,
+    site_position: Optional[List[float]] = None,
     height: float = 2.0,
     coverage: Optional[float] = None,
     _thread_id: Optional[str] = None,
@@ -272,8 +286,7 @@ def add_adsorbate(
     Args:
         slab_file: Path to slab structure file
         adsorbate_formula: Adsorbate formula/name (e.g., 'CO', 'H', 'O', 'CH4')
-        site_position_x: X fractional coordinate on surface (0.0-1.0)
-        site_position_y: Y fractional coordinate on surface (0.0-1.0)
+        site_position: Two fractional surface coordinates [x, y] each between 0 and 1
         height: Height above surface in Angstrom
         coverage: Surface coverage (if specified, will add multiple adsorbates)
 
@@ -281,7 +294,24 @@ def add_adsorbate(
         String with adsorbate information and file path
     """
     try:
-        # Read slab
+        # Default center of surface if not provided
+        if site_position is None:
+            site_position = [0.5, 0.5]
+
+        # Validate site_position early for clearer error messages & proper schema
+        if not isinstance(site_position, (list, tuple)):
+            return "Error: site_position must be a list like [x, y]."
+        if len(site_position) != 2:
+            return "Error: site_position must have exactly two values [x, y]."
+        try:
+            sx, sy = float(site_position[0]), float(site_position[1])
+        except Exception:
+            return "Error: site_position values must be numeric."
+        if not (0.0 <= sx <= 1.0 and 0.0 <= sy <= 1.0):
+            return "Error: site_position values must be within [0, 1]."
+
+        site_position = [sx, sy]
+
         slab = read(slab_file)
 
         # Create adsorbate molecule
@@ -308,28 +338,17 @@ def add_adsorbate(
                 adsorbate = Atoms(adsorbate_formula)
 
         # Add adsorbate to slab
-        site_position = (site_position_x, site_position_y)
-        ase_add_adsorbate(slab, adsorbate, height, position=site_position)
+        ase_add_adsorbate(slab, adsorbate, height, position=tuple(site_position))
 
-        # Generate output filename
         input_path = Path(slab_file)
-
-        # Use workspace-specific directory if thread_id is available
-        if _thread_id:
-            output_dir = get_subdir_path(_thread_id, "structures/with_adsorbates")
-        else:
-            # Fallback to outputs directory
-            output_dir = Path("data/outputs/structures/with_adsorbates")
-            output_dir.mkdir(parents=True, exist_ok=True)
+        output_dir = get_subdir_path(_thread_id, "structures/with_adsorbates")
 
         pos_str = f"x{site_position[0]:.2f}y{site_position[1]:.2f}"
-        output_filename = f"{input_path.stem}_{adsorbate_formula}_{pos_str}_h{height:.1f}{input_path.suffix}"
-        output_path = output_dir / output_filename
+        stem = f"{input_path.stem}_{adsorbate_formula}_{pos_str}_h{height:.1f}"
+        output_path = output_dir / f"{stem}.cif"
 
-        # Save structure with adsorbate
         write(str(output_path), slab)
 
-        # Create metadata
         metadata = {
             "slab_file": slab_file,
             "adsorbate": adsorbate_formula,
@@ -339,7 +358,7 @@ def add_adsorbate(
             "total_atoms": len(slab),
             "adsorbate_atoms": len(adsorbate),
             "formula": slab.get_chemical_formula(),
-            "filepath": str(output_path),
+            "files": {"cif": str(output_path)},
         }
 
         metadata_file = output_path.with_suffix(".json")
@@ -347,9 +366,9 @@ def add_adsorbate(
             json.dump(metadata, f, indent=2)
 
         return (
-            f"Added {adsorbate_formula} adsorbate at position {site_position} "
-            f"with height {height} Å. Total atoms: {len(slab)}. "
-            f"Saved as {output_path}"
+            f"Added {adsorbate_formula} adsorbate at {site_position}, "
+            f"height {height} Å. Total atoms: {len(slab)}. "
+            f"Saved to {output_path}"
         )
 
     except Exception as e:
@@ -374,26 +393,21 @@ def add_vacuum(
         String with vacuum addition information and file path
     """
     try:
-        # Read structure
         atoms = read(structure_file)
 
         # Add vacuum
         atoms.center(vacuum=thickness / 2, axis=axis)
 
-        # Generate output filename
         input_path = Path(structure_file)
-        output_dir = input_path.parent
+        # Use workspace-specific directory
+        output_dir = get_subdir_path(_thread_id, "structures/with_vacuum")
 
         axis_name = ["x", "y", "z"][axis]
-        output_filename = (
-            f"{input_path.stem}_vac{axis_name}{thickness:.1f}{input_path.suffix}"
-        )
-        output_path = output_dir / output_filename
+        stem = f"{input_path.stem}_vac{axis_name}{thickness:.1f}"
+        output_path = output_dir / f"{stem}.cif"
 
-        # Save structure
         write(str(output_path), atoms)
 
-        # Create metadata
         metadata = {
             "original_file": structure_file,
             "vacuum_axis": axis,
@@ -401,7 +415,7 @@ def add_vacuum(
             "num_atoms": len(atoms),
             "cell_volume": atoms.get_volume(),
             "formula": atoms.get_chemical_formula(),
-            "filepath": str(output_path),
+            "files": {"cif": str(output_path)},
         }
 
         metadata_file = output_path.with_suffix(".json")
@@ -410,8 +424,8 @@ def add_vacuum(
 
         return (
             f"Added {thickness} Å vacuum along {axis_name}-axis. "
-            f"New cell volume: {atoms.get_volume():.2f} Å³. "
-            f"Saved as {output_path}"
+            f"New volume {atoms.get_volume():.2f} Å³. "
+            f"Saved to {output_path}"
         )
 
     except Exception as e:

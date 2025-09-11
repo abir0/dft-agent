@@ -1,445 +1,377 @@
-# SurfScriptors - LLM-powered DFT Agent Workflow Automation for Surface Science
+# DFT Agent
 
-An intelligent LLM-powered agent framework for autonomous materials research and DFT (Density Functional Theory) calculations, built with LangGraph and FastAPI.
+An intelligent, tool-rich agent system for autonomous materials research and Density Functional Theory (DFT) workflows. Built with LangGraph (graph-based agent orchestration) and FastAPI, featuring persistent conversation state, structured workspaces, and an extensible tool registry for real computational tasks (structure generation, QE input creation, convergence testing, job submission, database storage, etc.).
 
-## 🚀 Quick Start
+## 🚀 Project Status
 
-```bash
-# Install dependencies
-uv sync --dev
-# or: pip install -e .
+The DFT agent is now implemented with a comprehensive tool suite and planning capabilities.
 
-# Configure environment
-cp env.example .env
-# Edit .env with your API keys (at least one required):
-# OPENAI_API_KEY="sk-..."
-# GROQ_API_KEY="gsk_..."
-# HF_API_KEY="hf_..."
+Currently available:
 
-# Start services
-./scripts/run.sh
+- ✅ LangGraph multi-node agent graphs (chat routing → DFT agent → tools)
+- ✅ REST API with invoke + streaming endpoints (`/agent/*`)
+- ✅ Persistent threaded state via SQLite checkpointing (thread_id based)
+- ✅ Multi-model LLM abstraction (OpenAI, Groq, HuggingFace, Ollama, Fake)
+- ✅ General Chatbot agent (web search, calculator, REPL, literature tools)
+- ✅ Full DFT Agent with workflow planning & execution
+- ✅ Quantum ESPRESSO input generation & local job submission utilities
+- ✅ Convergence testing (k-point, cutoff, slab thickness, vacuum)
+- ✅ Materials Project integration (structure search, analysis, formation energy)
+- ✅ Structure manipulation (bulk/slab generation, supercells, adsorption, vacuum)
+- ✅ Result/database tooling (store/query/export/search similar calculations)
+- ✅ Streaming SSE with token + structured message events
+- ✅ Authentication via bearer token (optional)
+- ✅ Streamlit UI
+- ⏳ Additional engine interfaces (VASP, Gaussian) – extensible
+- ⏳ Advanced workflow orchestration & visualization enhancements
 
-# Access interface
-open http://localhost:8501
+## 📁 Project Structure
+
+```text
+dft-agent/
+├── backend/                    # Core backend services
+│   ├── agents/                 # Agent implementations
+│   │   ├── library/           # Agent library (chatbot + dft_agent graph)
+│   │   │   ├── chatbot.py     # General-purpose chatbot agent
+│   │   │   └── dft_agent/     # DFT agent implementation (graph, planning, registry)
+│   │   ├── dft_tools/         # DFT tool implementations (structure/QE/db/convergence)
+│   │   ├── agent_manager.py   # Agent registry and management
+│   │   ├── client.py          # Agent client interface
+│   │   ├── llm.py            # LLM model configurations
+│   │   └── tools.py          # General-purpose tools
+│   ├── api/                   # FastAPI application
+│   │   ├── endpoints/         # API route handlers
+│   │   ├── main.py           # FastAPI app initialization
+│   │   └── dependencies.py   # Dependency injection
+│   ├── core/                  # Core data models and schemas
+│   │   ├── models.py         # Pydantic models
+│   │   ├── schema.py         # API schemas
+│   │   └── exceptions.py     # Custom exceptions
+│   ├── utils/                 # Utility modules
+│   └── web_browser/          # Web browsing capabilities
+├── frontend/                  # Streamlit web interface
+│   └── app.py                # Main Streamlit application
+├── data/                     # Data storage
+│   └── raw_data/             # Raw datasets (adsorption data)
+├── scripts/                  # Deployment and utility scripts
+└── logs/                     # Application logs
 ```
 
-## 📚 Table of Contents
+## 🛠 Technology Stack
 
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [DFT Tools Guide](#dft-tools-guide)
-- [Testing](#testing)
-- [API Usage](#api-usage)
-- [Project Structure](#project-structure)
-- [Troubleshooting](#troubleshooting)
+### Core Framework
 
-## 🛠️ Installation
+- **LangGraph**: Agent orchestration and state management
+- **FastAPI**: High-performance API framework
+- **Pydantic**: Data validation and serialization
+- **SQLite**: Conversation checkpointing and persistence
+
+### LLM Integrations
+
+Model selection is abstracted through enums; never hardcode raw model strings outside `backend/agents/llm.py`.
+
+Supported model families (availability depends on supplied API keys/env):
+
+- OpenAI: gpt-4o, gpt-4o-mini, gpt-5
+- Groq: groq-llama-3.1-8b, groq-llama-3.3-70b, groq-llama-guard-3-8b (safety)
+- HuggingFace: deepseek-r1, deepseek-v3
+- Ollama: configurable local model (default generic alias)
+- Fake: deterministic mock for testing
+
+### Materials Science & DFT Libraries
+
+- **ASE**: Atomic structure manipulation / I/O
+- **Pymatgen**: Structure analysis & materials data
+- **Materials Project API**: Remote materials database search
+- **SeekPath**: Brillouin zone path generation (band structures)
+- **NumPy / Pandas / Matplotlib / Seaborn**: Analysis & visualization utilities
+
+### Agent Tools & Utilities
+
+- Web search (DuckDuckGo)
+- Literature retrieval & open-access full text extraction
+- Calculator & Python REPL sandbox
+- DFT tool registry (see below)
+- Streaming + stateful workspace management
+
+## 🚀 Getting Started
 
 ### Prerequisites
-- **Python**: 3.12+ (required)
-- **Memory**: 8GB RAM minimum, 16GB recommended
-- **Storage**: 5GB free space
 
-### Method 1: Using uv (Recommended)
+- Python 3.12+
+- UV package manager (recommended) or pip
+
+### Installation
+
+1. **Clone the repository:**
+
+   ```bash
+   git clone <repository-url>
+   cd dft-agent
+   ```
+
+2. **Install dependencies:**
+
+   ```bash
+   # Using UV (recommended)
+   uv sync
+   
+   # Or using pip
+   pip install -e .
+   ```
+
+3. **Environment setup:**
+
+   ```bash
+   # Copy environment template
+   cp .env.example .env
+   
+   # Edit .env with your API keys
+   # Required: OPENAI_API_KEY, GROQ_API_KEY, etc.
+   ```
+
+### Running the Application
+
+#### Backend API Server
+
+Default host/port are `0.0.0.0:8080` (see `backend/settings.py`).
+
 ```bash
-git clone https://github.com/your-username/dft-agent.git
-cd dft-agent
-curl -LsSf https://astral.sh/uv/install.sh | sh
-uv sync --dev
-source .venv/bin/activate
-export PYTHONPATH="$(pwd):$PYTHONPATH"
+# Development (auto-reload if MODE=dev)
+cd backend
+python run_service.py
+
+# Or explicit uvicorn (matches settings PORT)
+uvicorn api.main:app --reload --host 0.0.0.0 --port 8080
 ```
 
-### Method 2: Using pip
+#### Frontend Interface
+
 ```bash
-git clone https://github.com/your-username/dft-agent.git
-cd dft-agent
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
-export PYTHONPATH="$(pwd):$PYTHONPATH"
+# Streamlit app
+cd frontend
+streamlit run app.py
 ```
 
-### Method 3: Using Docker
+#### Using Docker
+
 ```bash
-git clone https://github.com/your-username/dft-agent.git
-cd dft-agent
+# Build and run with docker-compose
 docker-compose up --build
 ```
 
-## ⚙️ Configuration
+### API Usage
 
-### Environment Setup
-```bash
-cp env.example .env
-```
+All agent interactions are under the `/agent` prefix with optional bearer auth.
 
-### Required API Keys (at least one)
-```bash
-# LLM API Keys
-OPENAI_API_KEY="sk-..."
-GROQ_API_KEY="gsk_..."
-HF_API_KEY="hf_..."
+Core endpoints:
 
-# Materials Project API Key (optional)
-MP_API_KEY="your_materials_project_key"
+- `POST /agent/invoke` (or `/agent/{agent_id}/invoke`) – single-turn execution
+- `POST /agent/stream` – Server-Sent Events (SSE) streaming
+- `POST /agent/feedback` – record LangSmith feedback
+- `POST /agent/history` – retrieve conversation history for a thread
+- `GET /health` – service health
+- `GET /info` – models + agents metadata
 
-# LangSmith Settings (optional)
-LANGCHAIN_TRACING_V2="true"
-LANGCHAIN_API_KEY="ls__..."
-LANGCHAIN_PROJECT="dft-agent"
-```
+SSE events emitted:
 
-### DFT Software Setup (Optional)
-```bash
-# Quantum ESPRESSO
-sudo apt-get install quantum-espresso  # Ubuntu/Debian
-brew install quantum-espresso          # macOS
-export QE_BIN="/path/to/pw.x"
+- `token` – incremental LLM text (when `stream_tokens=true`)
+- `message` – structured message objects (tool outputs, AI replies)
+- `[DONE]` – stream termination sentinel
 
-# VASP (if available)
-export VASP_BIN="/path/to/vasp_std"
-```
+Threaded persistence:
 
-## ⚛️ DFT Tools Guide
+- Provide a `thread_id` in the JSON body to resume context & workspace.
+- Omit to auto-generate a new isolated conversation/workspace.
 
-The DFT Agent provides **29 specialized tools** across **8 categories** for comprehensive materials research.
+Authentication (optional):
 
-### Tool Categories
+- If `AUTH_SECRET` is set, include `Authorization: Bearer <SECRET>` header.
 
-#### 1. Structure Generation & Manipulation (5 tools)
-- **`generate_bulk`** - Create bulk crystal structures
-- **`create_supercell`** - Generate supercells
-- **`generate_slab`** - Create surface slabs
-- **`add_adsorbate`** - Add adsorbates to surfaces
-- **`add_vacuum`** - Add vacuum layers
+Example (invoke chatbot):
 
-#### 2. DFT Calculation & Optimization (4 tools)
-- **`run_dft_calculation`** - Execute DFT calculations
-- **`optimize_structure_dft`** - Optimize structures
-- **`relax_slab_dft`** - **NEW**: Relax slabs with layer fixing for catalysis
-- **`test_hydrogen_atom`** - Simple test calculation
-
-#### 3. Structure Optimization (2 tools)
-- **`relax_bulk`** - Relax bulk structures
-- **`relax_slab`** - Relax slab structures (ASE-based)
-
-#### 4. K-point Analysis (2 tools)
-- **`generate_kpoint_mesh`** - Generate k-point meshes
-- **`get_kpath_bandstructure`** - Generate k-paths for band structure
-
-#### 5. Materials Database (4 tools)
-- **`search_materials_project`** - Search Materials Project
-- **`analyze_crystal_structure`** - Analyze crystal properties
-- **`find_pseudopotentials`** - Find pseudopotentials
-- **`calculate_formation_energy`** - Calculate formation energies
-
-#### 6. Quantum ESPRESSO Interface (5 tools)
-- **`generate_qe_input`** - Generate QE input files
-- **`submit_local_job`** - Submit local jobs
-- **`check_job_status`** - Monitor job status
-- **`read_output_file`** - Parse output files
-- **`extract_energy`** - Extract energy values
-
-#### 7. Convergence Testing (4 tools)
-- **`kpoint_convergence_test`** - Test k-point convergence
-- **`cutoff_convergence_test`** - Test cutoff convergence
-- **`slab_thickness_convergence`** - Test slab thickness
-- **`vacuum_convergence_test`** - Test vacuum thickness
-
-#### 8. Database Management (7 tools)
-- **`create_calculations_database`** - Create SQLite database
-- **`store_calculation`** - Store calculation results
-- **`update_calculation_status`** - Update calculation status
-- **`store_adsorption_energy`** - Store adsorption data
-- **`query_calculations`** - Query database
-- **`export_results`** - Export results
-- **`search_similar_calculations`** - Find similar calculations
-
-### Usage Examples
-
-#### Basic Workflow
 ```python
-from backend.agents.dft_tools import (
-    generate_bulk, generate_slab, relax_slab_dft, 
-    add_adsorbate, run_dft_calculation
-)
+import httpx, uuid
 
-# 1. Generate bulk structure
-bulk = generate_bulk.invoke({
-    "element": "Pt",
-    "crystal_structure": "fcc",
-    "lattice_parameter": 3.92,
-    "output_file": "Pt_bulk.xyz"
-})
-
-# 2. Create slab
-slab = generate_slab.invoke({
-    "structure_file": "Pt_bulk.xyz",
-    "miller_indices": [1, 1, 1],
-    "layers": 5,
-    "vacuum": 15.0,
-    "output_file": "Pt_slab.xyz"
-})
-
-# 3. Relax slab with layer fixing (for catalysis)
-relaxed = relax_slab_dft.invoke({
-    "structure_file": "Pt_slab.xyz",
-    "output_dir": "Pt_relax",
-    "fixed_layers": 2,  # Fix 2 bottom layers
-    "ecutwfc": 40.0,
-    "kpts": [8, 8, 1]
-})
-
-# 4. Add adsorbate
-with_adsorbate = add_adsorbate.invoke({
-    "structure_file": "Pt_relaxed.xyz",
-    "adsorbate": "CO",
-    "position": [0.0, 0.0, 2.5],
-    "output_file": "Pt_CO.xyz"
-})
-
-# 5. Run DFT calculation
-calculation = run_dft_calculation.invoke({
-    "structure_file": "Pt_CO.xyz",
-    "output_dir": "Pt_CO_calc",
-    "ecutwfc": 40.0,
-    "kpts": [8, 8, 1],
-    "calculation_type": "scf"
-})
+BASE = "http://localhost:8080"
+thread_id = str(uuid.uuid4())
+payload = {
+    "message": "Give me a brief overview of DFT in 3 bullet points.",
+    "model": "gpt-4o-mini",
+    "thread_id": thread_id,
+}
+r = httpx.post(f"{BASE}/agent/invoke", json=payload)
+print(r.json())
 ```
 
-#### Convergence Testing
+Streaming with async client (DFT agent):
+
 ```python
-from backend.agents.dft_tools import (
-    kpoint_convergence_test, cutoff_convergence_test
-)
+import asyncio, httpx
 
-# Test k-point convergence
-kpoint_results = kpoint_convergence_test.invoke({
-    "structure_file": "Si_bulk.xyz",
-    "output_dir": "kpoint_conv",
-    "kpoint_range": [2, 4, 6, 8, 10],
-    "ecutwfc": 30.0
-})
+async def main():
+    async with httpx.AsyncClient(timeout=None) as client:
+        async with client.stream("POST", "http://localhost:8080/agent/stream", json={
+            "message": "Create a plan to compute the adsorption energy of CO on Pt(111)",
+            "model": "gpt-5",
+            "thread_id": "example-thread-1"
+        }) as resp:
+            async for line in resp.aiter_lines():
+                if line.startswith("data: "):
+                    print(line[6:])
 
-# Test cutoff convergence
-cutoff_results = cutoff_convergence_test.invoke({
-    "structure_file": "Si_bulk.xyz",
-    "output_dir": "cutoff_conv",
-    "cutoff_range": [20, 30, 40, 50],
-    "kpts": [6, 6, 6]
-})
+asyncio.run(main())
 ```
 
-### Best Practices
+Invoking a specific agent:
 
-#### Parameter Selection
-- **Metals**: Higher cutoffs (35-50 Ry), Fermi-Dirac smearing
-- **Semiconductors**: Moderate cutoffs (25-35 Ry), Gaussian smearing
-- **Insulators**: Lower cutoffs (20-30 Ry), Gaussian smearing
-
-#### K-point Mesh
-- **Bulk**: Dense mesh (6x6x6 to 12x12x12)
-- **Slabs**: Dense x-y, single z (8x8x1 to 12x12x1)
-- **Molecules**: Single k-point (1x1x1)
-
-## 🧪 Testing
-
-### Basic Tests (Recommended First)
-```bash
-# Run basic functionality tests
-python tests/test_dft_tools_basic.py
-```
-
-**Expected Output:**
-```
-🚀 Starting Basic DFT Tools Testing
-==================================================
-Total Tests: 29
-✅ Passed: 28
-❌ Failed: 1
-📈 Success Rate: 96.6%
-```
-
-### Comprehensive Tests
-```bash
-# Run full DFT tool tests (requires DFT software)
-python tests/test_dft_tools_comprehensive.py
-```
-
-**Expected Output:**
-```
-🚀 Starting Comprehensive DFT Tools Testing
-============================================================
-Total Tests: 36
-✅ Passed: 32
-❌ Failed: 4
-📈 Success Rate: 88.9%
-```
-
-### Test Categories
-- **Module imports** (8 tests)
-- **Tool registry** (7 tests)
-- **Structure operations** (2 tests)
-- **Database operations** (2 tests)
-- **Configuration validation** (3 tests)
-- **File I/O operations** (3 tests)
-- **Environment setup** (3 tests)
-
-## 🌐 API Usage
-
-### Web Interface
-1. **Open**: http://localhost:8501
-2. **Select Agent**: Choose "DFT Agent" from dropdown
-3. **Ask Questions**: 
-   - "Generate a platinum bulk structure"
-   - "Create a (111) surface slab"
-   - "Relax the slab with 2 fixed layers"
-   - "Add a CO molecule to the surface"
-
-### REST API
-```bash
-# Chat with agent
-curl -X POST "http://localhost:8080/api/agent/chat" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": "Generate a silicon bulk structure",
-    "agent_type": "dft_agent"
-  }'
-
-# Get available tools
-curl -X GET "http://localhost:8080/api/agent/tools"
-```
-
-### Python Client
 ```python
-import requests
-
-response = requests.post("http://localhost:8080/api/agent/chat", json={
-    "message": "Generate a platinum bulk structure",
-    "agent_type": "dft_agent"
+httpx.post(f"{BASE}/agent/dft_agent/invoke", json={
+    "message": "Generate a QE SCF input for fcc Pt (4 atom conventional cell).",
+    "model": "gpt-4o",
+    "thread_id": thread_id
 })
-
-print(response.json())
 ```
 
-## 🏗️ Project Structure
+## 🔧 Configuration
 
-```
-dft-agent/
-├── README.md              # This comprehensive guide
-├── pyproject.toml         # Project configuration
-├── setup.py               # Package setup
-├── env.example            # Environment template
-├── docker-compose.yaml    # Docker configuration
-├── backend/               # Core backend services
-│   ├── agents/            # Agent implementations
-│   │   ├── dft_tools/     # 29 DFT-specific tools
-│   │   ├── library/       # Agent library
-│   │   └── ...
-│   ├── api/               # FastAPI application
-│   ├── core/              # Core data models
-│   └── settings.py        # Configuration management
-├── frontend/              # Streamlit web interface
-├── tests/                 # Test suites
-├── scripts/               # Utility scripts
-├── data/                  # Data storage
-│   ├── inputs/            # Input data and pseudopotentials
-│   └── outputs/           # Calculation results
-├── structures/            # Structure files
-├── logs/                  # Log files
-└── WORKSPACE/             # User-specific workspaces
-```
+### Model Configuration
 
-## 🔧 Key Features
+Models are enumerated in `backend/core/models.py`; provider dispatch & instantiation lives in `backend/agents/llm.py`. Add new enum members then map them in `_MODEL_TABLE` – the API surfaces availability via `/info`.
 
-- **29 DFT Tools** across 8 categories for materials research
-- **LLM Integration** with GPT-5, Groq, Ollama, and HuggingFace
-- **Surface Science** tools for heterogeneous catalysis studies
-- **REST API** and Web Interface for easy access
-- **Docker Support** for containerized deployment
-- **Database Management** with SQLite-based calculation tracking
-- **Convergence Testing** for automated parameter optimization
+### Agent Configuration
 
-## 🆘 Troubleshooting
+`backend/agents/agent_manager.py` registers compiled graphs. Default agent: `dft_agent`.
 
-### Common Issues
+## 📊 Current Agents
 
-#### Import Errors
-```bash
-# Error: ModuleNotFoundError: No module named 'backend'
-# Solution:
-export PYTHONPATH="$(pwd):$PYTHONPATH"
-```
+### Chatbot Agent
 
-#### Missing Dependencies
-```bash
-# Error: ImportError: No module named 'ase'
-# Solution:
-uv sync --dev
-# or
-pip install -e .
-```
+General multi-domain assistant with:
 
-#### DFT Software Not Found
-```bash
-# Error: Executable 'pw.x' not found in PATH
-# Solution:
-sudo apt-get install quantum-espresso
-# Or set environment variable
-export QE_BIN="/path/to/pw.x"
-```
+- Web search (DuckDuckGo)
+- Calculator & Python REPL
+- Open-access literature text extraction
+- (Lazy) Asta MCP scholarly data tools (papers, citations, authors) when available
 
-#### API Key Issues
-```bash
-# Error: ValueError: At least one LLM API key must be provided
-# Solution:
-# Edit .env file with your API keys
-export OPENAI_API_KEY="sk-..."
-export MP_API_KEY="your_mp_key"
-```
+### DFT Agent Overview
 
-#### Permission Errors
-```bash
-# Error: PermissionError: [Errno 13] Permission denied
-# Solution:
-chmod +x scripts/*.sh
-chmod +x tests/*.py
-```
+Expert computational materials assistant that performs planning + tool execution. Key features:
 
-### Getting Help
-1. **Check Logs**: `tail -f logs/service.log`
-2. **Run Tests**: `python tests/test_dft_tools_basic.py`
-3. **Verify Setup**: Check environment variables and API keys
-4. **Create Issue**: If problems persist, create an issue in the repository
+- Plan creation & step execution ("create plan for adsorption energy on Pt(111)")
+- Structure generation: bulk, supercell, slab, adsorption, vacuum
+- Quantum ESPRESSO: input generation, local job submission, status, output parsing
+- Convergence testing: k-point, cutoff, slab thickness, vacuum spacing
+- Materials Project: search, structure analysis, formation energy
+- Workspace-aware: per-thread directories under `WORKSPACE/<thread_id>/...`
+- Lightweight state (recent structures, last calculation, workflow step, plan)
+- Database utilities: create/store/update/query/export/search calculations
 
-## 📊 System Status
+#### DFT Tool Registry (selected)
 
-- **Total Tools**: 29 DFT tools across 8 categories
-- **Test Coverage**: 96.6% success rate on basic functionality
-- **Documentation**: Comprehensive single-file guide
-- **API Support**: RESTful API with OpenAPI documentation
-- **Status**: Production Ready
+Structure: `generate_bulk`, `create_supercell`, `generate_slab`, `add_adsorbate`, `add_vacuum`
+QE & Execution: `generate_qe_input`, `submit_local_job`, `check_job_status`, `read_output_file`, `extract_energy`
+Convergence: `kpoint_convergence_test`, `cutoff_convergence_test`, `slab_thickness_convergence`, `vacuum_convergence_test`
+Materials & Analysis: `search_materials_project`, `analyze_crystal_structure`, `find_pseudopotentials`, `calculate_formation_energy`
+Database & Results: `create_calculations_database`, `store_calculation`, `update_calculation_status`, `store_adsorption_energy`, `query_calculations`, `export_results`, `search_similar_calculations`
+
+All tool implementations live in `backend/agents/dft_tools/` and are registered via `tool_registry.py`.
+
+Example DFT workflow (manual steps):
+
+1. Generate bulk: ask "Generate fcc Pt bulk"
+2. Create slab: "Create a (1 1 1) slab with 4 layers"
+3. Add adsorbate: "Add CO adsorbate"
+4. Generate QE input: "Make an scf QE input with 50 Ry cutoff"
+5. Submit job: "Submit local QE job" (specify input mapping)
+6. Check status & extract energy
+
+Or request a plan: "Create plan for adsorption energy of CO on Pt(111)" then "execute plan".
+
+## 📈 Development Roadmap (Updated)
+
+Phase 1 (Foundation) – Complete
+
+- LangGraph agent graphs, multi-model support, API, Streamlit, base tools
+
+Phase 2 (Core DFT) – Largely Complete
+
+- Structure generation & manipulation
+- Materials Project integration
+- QE input + submission + parsing
+- Convergence tests
+- Local calculation database tooling
+- Planning system (simple sequential plans)
+
+Phase 3 (Planned Enhancements)
+
+- Additional engines (VASP, Gaussian interfaces)
+- Advanced multi-branch workflows & dependency tracking
+- Automated job chaining & error recovery loops
+- Enhanced visualization (band structures, charge densities)
+- HPC / remote scheduler integration (SLURM, PBS)
+- Result provenance & reproducibility metadata exporter
+- Rich Streamlit UI modules for trajectory & convergence plots
+
+Phase 4 (Stretch)
+
+- Active learning loops (suggest next calculations)
+- Uncertainty-aware workflow steering
+- Multi-agent collaboration (planner/critic/executor roles)
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🎯 Use Cases
+## 🙏 Acknowledgments
 
-### Materials Research
-- Structure generation and optimization
-- Surface science and catalysis studies
-- Convergence testing and parameter optimization
-- Materials database integration
-
-### DFT Calculations
-- Quantum ESPRESSO and VASP integration
-- Automated workflow management
-- Database tracking and result storage
-- Web-based interface for researchers
+- Built on the excellent [LangGraph](https://github.com/langchain-ai/langgraph) framework
+- Utilizes the [Materials Project](https://materialsproject.org/) ecosystem
+- Inspired by the computational materials science community
 
 ---
 
-**Ready to start?** Run `./scripts/run.sh` and open http://localhost:8501!
+### 🔐 Environment Variables (Summary)
+
+| Variable | Purpose |
+|----------|---------|
+| OPENAI_API_KEY | Enable OpenAI models |
+| GROQ_API_KEY | Enable Groq Llama models |
+| HF_API_KEY | Enable HuggingFace endpoint models |
+| OLLAMA_MODEL / OLLAMA_BASE_URL | Local Ollama model config |
+| AUTH_SECRET | Optional bearer token for API protection |
+| MP_API_KEY | Materials Project queries |
+| ASTA_KEY | Scholarly (Asta MCP) tools |
+| DEFAULT_MODEL | Override initial default model |
+| MODE=dev | Enables auto-reload & dev behaviors |
+
+At least one model provider key (or USE_FAKE_MODEL=true) must be set; otherwise initialization will fail.
+
+### 🗂 Workspace Layout
+
+Per-thread directories under `WORKSPACE/<thread_id>/` with standardized subfolders:
+
+```text
+calculations/  convergence_tests/  databases/  kpaths/  kpoints/  optimized/  relaxed/  results/  structures/
+```
+
+Tools automatically place generated artifacts in the correct subfolder (e.g. QE inputs under `calculations/qe_inputs/`). Return payloads are concise; large artifacts are written to disk for persistence.
+
+### 🛡 Safety Notes
+
+- The `python_repl` tool executes arbitrary code – restrict or disable in production deployments.
+- All file operations are scoped to the workspace root; avoid passing untrusted absolute paths.
+
+### ❓ Support
+
+Open an issue or discussion for feature requests, bug reports, or extension ideas.
+
+Happy computing!

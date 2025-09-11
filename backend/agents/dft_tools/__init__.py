@@ -9,18 +9,6 @@ This package contains tools for DFT calculations including:
 """
 
 # Import all tools from submodules
-from .ase_tools import (
-    generate_kpoint_mesh,
-    get_kpath_bandstructure,
-    relax_bulk,
-    relax_slab,
-)
-from .dft_calculator import (
-    run_dft_calculation,
-    optimize_structure_dft,
-    relax_slab_dft,
-    test_hydrogen_atom,
-)
 from .convergence_tools import (
     cutoff_convergence_test,
     kpoint_convergence_test,
@@ -56,15 +44,6 @@ from .structure_tools import (
     generate_bulk,
     generate_slab,
 )
-from .tool_registry import (
-    TOOL_REGISTRY,
-    TOOL_CATEGORIES,
-    get_tool_by_name,
-    get_tools_by_category,
-    list_all_tools,
-    list_categories,
-    get_tool_info,
-)
 
 __all__ = [  # noqa: RUF022
     # Structure tools
@@ -73,16 +52,6 @@ __all__ = [  # noqa: RUF022
     "generate_slab",
     "add_adsorbate",
     "add_vacuum",
-    # DFT calculator tools
-    "run_dft_calculation",
-    "optimize_structure_dft",
-    "relax_slab_dft",
-    "test_hydrogen_atom",
-    # ASE tools
-    "get_kpath_bandstructure",
-    "generate_kpoint_mesh",
-    "relax_bulk",
-    "relax_slab",
     # Pymatgen tools
     "search_materials_project",
     "analyze_crystal_structure",
@@ -107,12 +76,4 @@ __all__ = [  # noqa: RUF022
     "query_calculations",
     "export_results",
     "search_similar_calculations",
-    # Tool registry
-    "TOOL_REGISTRY",
-    "TOOL_CATEGORIES",
-    "get_tool_by_name",
-    "get_tools_by_category",
-    "list_all_tools",
-    "list_categories",
-    "get_tool_info",
 ]

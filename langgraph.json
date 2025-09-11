@@ -1,7 +1,7 @@
 {
     "dockerfile_lines": [],
     "graphs": {
-        "chatbot": "./backend/agents/library/chatbot.py:chatbot"
+        "dft_agent": "./backend/agents/library/dft_agent/agent.py:dft_agent"
     },
     "env": ".env",
     "python_version": "3.12",
