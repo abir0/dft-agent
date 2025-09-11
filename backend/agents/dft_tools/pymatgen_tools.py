@@ -9,26 +9,14 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from ase.io import read, write
 from langchain_core.tools import tool
-
-try:
-    from mp_api.client import MPRester
-    from pymatgen.analysis.local_env import CrystalNN
-    from pymatgen.analysis.structure_matcher import StructureMatcher
-    from pymatgen.core import Structure
-    from pymatgen.io.ase import AseAtomsAdaptor
-    from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-
-    MP_API_AVAILABLE = True
-except ImportError:
-    MP_API_AVAILABLE = False
-
-try:
-    from ase.io import read, write
-
-    ASE_AVAILABLE = True
-except ImportError:
-    ASE_AVAILABLE = False
+from mp_api.client import MPRester
+from pymatgen.analysis.local_env import CrystalNN
+from pymatgen.analysis.structure_matcher import StructureMatcher
+from pymatgen.core import Structure
+from pymatgen.io.ase import AseAtomsAdaptor
+from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 
 @tool
@@ -50,9 +38,6 @@ def search_materials_project(
         Search results with material properties
     """
     try:
-        if not MP_API_AVAILABLE:
-            return "Error: Materials Project API not available. Please install with: pip install mp-api"
-
         if properties is None:
             properties = [
                 "material_id",
@@ -145,14 +130,6 @@ def analyze_crystal_structure(
         String with crystal structure analysis
     """
     try:
-        if not MP_API_AVAILABLE:
-            return (
-                "Error: Pymatgen not available. Please install with: pip install pymatgen"
-            )
-
-        if not ASE_AVAILABLE:
-            return "Error: ASE not available. Please install with: pip install ase"
-
         # Read structure using ASE then convert to Pymatgen
         atoms = read(structure_file)
         adaptor = AseAtomsAdaptor()
@@ -383,9 +360,6 @@ def calculate_formation_energy(
         Formation energy calculation results
     """
     try:
-        if not ASE_AVAILABLE:
-            return "Error: ASE not available. Please install with: pip install ase"
-
         # Read structure
         atoms = read(structure_file)
 
