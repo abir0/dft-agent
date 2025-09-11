@@ -9,12 +9,10 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from ase.io import read, write
+from ase.io import read
 from langchain_core.tools import tool
 from mp_api.client import MPRester
 from pymatgen.analysis.local_env import CrystalNN
-from pymatgen.analysis.structure_matcher import StructureMatcher
-from pymatgen.core import Structure
 from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
