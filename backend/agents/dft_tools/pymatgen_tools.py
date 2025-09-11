@@ -22,6 +22,13 @@ from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 from backend.settings import settings
 
+headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+}
+
+
 # Load parsed pseudopotential data
 with open("data/pseudos_metadata.json", "r", encoding="utf-8") as f:
     PP_METADATA = json.load(f)
@@ -272,10 +279,10 @@ def find_pseudopotentials(
 
             # Download the pseudopotential if not already present
             if not local_file.exists():
-                r = requests.get(url, stream=True)
-                if r.status_code == 200:
-                    with open(local_file, "wb") as f:
-                        shutil.copyfileobj(r.raw, f)
+                response = requests.get(url, headers=headers)
+                if response.status_code == 200:
+                    with open(local_file, "w") as f:
+                        f.write(response.text)
                 else:
                     missing_pps.append(elem)
                     continue

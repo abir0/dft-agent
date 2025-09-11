@@ -191,6 +191,7 @@ def generate_qe_input(
                 "ecutrho": ecutrho,
                 "occupations": occupations,
                 "input_dft": input_dft,
+                "lspinorb": True if "rel" in pseudopotentials else False,
             },
             "electrons": {
                 "conv_thr": 1e-8,
