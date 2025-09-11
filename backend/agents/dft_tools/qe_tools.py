@@ -285,10 +285,12 @@ def submit_local_job(
     num_cores: int = 1,
     memory_limit: str = "2GB",
 ) -> str:
-    """Submit calculation to local machine.
+    """Submit a DFT calculation to local machine.
+    To submit a job, provide a dictionary mapping calculation types
+    to input file paths. Supports multiple calculations in one call.
 
     Args:
-        input_files: Dict of calculation_type -> input_file_path
+        input_files: Dict of calculation_type ('scf', 'relax', 'bands', ...) -> input_file_path
         executable: QE executable name
         num_cores: Number of CPU cores to use
         memory_limit: Memory limit for the job
@@ -300,6 +302,11 @@ def submit_local_job(
         job_results = {}
 
         for calc_type, input_file in input_files.items():
+            # Validate calculation type
+            valid_calculations = ["scf", "relax", "bands", "nscf", "vc-relax", "ensemble"]
+            if calc_type not in valid_calculations:
+                raise ValueError(f"Invalid calculation type '{calc_type}'")
+            # Validate input file
             input_path = Path(input_file)
             if not input_path.exists():
                 job_results[calc_type] = {
