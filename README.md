@@ -1,4 +1,4 @@
-# DFT Agent
+# SurfScriptors - LLM-powered DFT Agent Workflow Automation for Surface Science
 
 An intelligent LLM-powered agent framework for autonomous materials research and DFT (Density Functional Theory) calculations, built with LangGraph and FastAPI.
 
@@ -223,7 +223,6 @@ agents: dict[str, Agent] = {
 - [ ] Pymatgen tools for materials analysis
 - [ ] Quantum ESPRESSO interface
 - [ ] VASP interface
-- [ ] Gaussian interface
 
 ### Phase 3: Advanced Features
 
