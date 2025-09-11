@@ -23,7 +23,7 @@ from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from backend.settings import settings
 
 # Load parsed pseudopotential data
-with open("pseudos_metadata.json", "r", encoding="utf-8") as f:
+with open("data/pseudos_metadata.json", "r", encoding="utf-8") as f:
     PP_METADATA = json.load(f)
 
 
