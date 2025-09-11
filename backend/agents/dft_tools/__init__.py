@@ -9,13 +9,6 @@ This package contains tools for DFT calculations including:
 """
 
 # Import all tools from submodules
-from .ase_tools import (
-    generate_kpoint_mesh,
-    geometry_optimization,
-    get_kpath_bandstructure,
-    relax_bulk,
-    relax_slab,
-)
 from .convergence_tools import (
     cutoff_convergence_test,
     kpoint_convergence_test,
@@ -59,12 +52,6 @@ __all__ = [  # noqa: RUF022
     "generate_slab",
     "add_adsorbate",
     "add_vacuum",
-    # ASE tools
-    "geometry_optimization",
-    "get_kpath_bandstructure",
-    "generate_kpoint_mesh",
-    "relax_bulk",
-    "relax_slab",
     # Pymatgen tools
     "search_materials_project",
     "analyze_crystal_structure",
