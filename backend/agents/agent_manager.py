@@ -22,7 +22,7 @@ class AgentConfig:
 
 def _create_chatbot():
     from backend.agents.library.chatbot import chatbot
-    return chatbot()
+    return chatbot
 
 
 def _create_dft_agent():
