@@ -157,6 +157,9 @@ def generate_qe_input(
                     # For transition metals and heavy elements
                     pseudopotentials[el] = f"{el}.pbe-spn-rrkjus_psl.1.0.0.UPF"
 
+        for k, v in pseudopotentials.items():
+            pseudopotentials[k] = Path(str(v)).name  # Use only filename
+
         # Use workspace-specific directory if thread_id is available
         output_dir = get_subdir_path(_thread_id, "calculations/qe_inputs")
 
