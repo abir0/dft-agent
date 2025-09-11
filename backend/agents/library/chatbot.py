@@ -352,5 +352,21 @@ class LazyWorkflow:
             return async_method()
         return method_wrapper
 
-# Create the lazy workflow instance
-chatbot = LazyWorkflow()
+# Create a factory function that returns the compiled graph
+def chatbot():
+    """Factory function that returns the compiled chatbot graph."""
+    async def async_factory():
+        return await create_chatbot_workflow()
+    
+    # Handle different async contexts
+    try:
+        # Try to get the current event loop
+        loop = asyncio.get_running_loop()
+        # If we're in an async context, we need to use a different approach
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(asyncio.run, async_factory())
+            return future.result()
+    except RuntimeError:
+        # No event loop running, we can create our own
+        return asyncio.run(async_factory())

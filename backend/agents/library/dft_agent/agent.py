@@ -563,3 +563,6 @@ workflow.add_edge("tools", "dft_agent")
 legacy_dft_agent = workflow.compile(checkpointer=MemorySaver())
 
 # The main agent is handled in __init__.py to avoid circular imports
+
+# Export the main agent as dft_agent for compatibility with agent_manager
+dft_agent = legacy_dft_agent
