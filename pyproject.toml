@@ -60,7 +60,8 @@ client = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
+exclude = ["dist", "build", "scripts", "data", "logs", "WORKSPACE", ".venv"]
 
 [tool.uv]
 dev-dependencies = [
