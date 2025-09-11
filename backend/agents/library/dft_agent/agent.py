@@ -1,8 +1,15 @@
-"""
-DFT Agent Implementation
+"""Simplified DFT Agent Graph
 
-A comprehensive DFT agent that orchestrates computational materials science workflows
-using the DFT tools package.
+This module defines a streamlined DFT agent similar in structure to the provided
+Data Analyst agent example. The agent:
+ - Chats about its DFT capabilities
+ - Plans multi-step workflows (explicit planning loop in model instructions)
+ - Executes registered DFT tools (with automatic thread / workspace injection)
+ - Summarizes / analyzes results after tool executions
+ - Handles tool errors, attempts automatic fixes (up to 3 retries), and reports
+   failures with guidance (leveraging an `error_handler` tool when appropriate)
+
+State retains lightweight workflow context (working directory, structures, etc.).
 """
 
 import asyncio
@@ -12,16 +19,13 @@ from typing import Any, Dict, Optional
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
-from langchain_core.runnables import (
-    RunnableConfig,
-    RunnableLambda,
-    RunnableSerializable,
-)
-from langgraph.graph import MessagesState, StateGraph
+from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableSerializable
+from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.prebuilt import tools_condition
 
 from backend.agents.library.dft_agent.tool_registry import TOOL_REGISTRY
 from backend.agents.llm import get_model, settings
+from backend.agents.tools import python_repl
 from backend.utils.workspace import (
     async_get_workspace_path,
     extract_thread_id_from_config,
@@ -60,8 +64,12 @@ class AgentState(MessagesState, total=False):
     workflow_step: int
 
 
-# Get all DFT tools from registry
-dft_tools = list(TOOL_REGISTRY.values())
+#############################################
+# Tools
+#############################################
+
+# Collect all registered DFT tools plus generic python REPL
+dft_tools = [*TOOL_REGISTRY.values(), python_repl]
 
 
 async def initialize_agent_state(
@@ -116,100 +124,62 @@ def reset_workflow(state: AgentState) -> AgentState:
     return {**state, "current_workflow": None, "workflow_step": 0}
 
 
-# System message for DFT agent
+#############################################
+# System Instructions
+#############################################
+
 current_date = datetime.now().strftime("%B %d, %Y")
 
 instructions = f"""
-    You are an expert DFT (Density Functional Theory) agent specialized in computational materials science.
-    Today's date is {current_date}.
+You are an expert Density Functional Theory (DFT) autonomous research assistant.
+Today's date is {current_date}.
 
-    NOTE: THE USER CAN'T SEE THE TOOL RESPONSE DIRECTLY.
+PRIMARY OBJECTIVE: Understand the user's materials science goal, design a concise step-by-step DFT workflow, execute necessary tool calls, then return a clear scientific summary (methods, key parameters, results, next steps).
 
-    PLANNING CAPABILITIES:
-    - You can create, modify, and execute workflow plans for complex DFT tasks
-    - Plans consist of sequential steps using available tools
-    - Each plan has a goal and breaks complex workflows into manageable steps
-    - You can execute plans step-by-step and track progress
+CAPABILITIES / TOOL GROUPS:
+ 1. Structure generation/manipulation: generate_bulk, create_supercell, generate_slab, add_adsorbate, add_vacuum
+ 2. Setup & execution: generate_qe_input, submit_local_job, check_job_status, read_output_file, extract_energy
+ 3. Optimization & analysis: geometry_optimization, relax_bulk, relax_slab, generate_kpoint_mesh, get_kpath_bandstructure
+ 4. Databases & info: search_materials_project, analyze_crystal_structure, find_pseudopotentials
+ 5. Convergence: kpoint_convergence_test, cutoff_convergence_test, slab_thickness_convergence, vacuum_convergence_test
+ 6. Properties: calculate_adsorption_energy, calculate_surface_energy, calculate_formation_energy, validate_calculation
+ 7. Data management: create_calculations_database, store_calculation, query_calculations, export_results, search_similar_calculations
+ 8. Troubleshooting: error_handler
+ 9. Lightweight data parsing / quick calculations / custom post-processing: python_repl (use for inspecting tool output files, computing derived quantities, small pandas dataframes, or generating simple plots if needed)
 
-    Your capabilities include:
+STATE (use sparingly / reference, do NOT dump raw): working_directory, current_structures (<=5), last_calculation, current_workflow, workflow_step.
 
-    1. STRUCTURE GENERATION & MANIPULATION:
-       - Generate bulk crystal structures (generate_bulk)
-       - Create supercells (create_supercell)
-       - Generate surface slabs (generate_slab)
-       - Add adsorbates to surfaces (add_adsorbate)
-       - Add vacuum layers (add_vacuum)
+WORKSPACE: All user-specific files live under {settings.ROOT_PATH}/WORKSPACE/<thread_id>/ with subfolders (structures/, calculations/, results/, convergence/, db/).
 
-    2. CALCULATION SETUP & EXECUTION:
-       - Generate Quantum ESPRESSO input files (generate_qe_input)
-       - Submit and monitor calculations (submit_local_job, check_job_status)
-       - Parse calculation outputs (read_output_file, extract_energy)
+PROCESS (follow unless user explicitly wants ad-hoc answer):
+ Step 0: Clarify goal (if ambiguous) otherwise restate it concisely.
+ Step 1: Draft a minimal numbered PLAN (1..N) mapping actions to tools (only those likely needed). Include rationale (short phrases). If purely conceptual question, skip tools and answer directly.
+ Step 2: Execute plan step-by-step via tool calls. Only call one logically atomic tool per step (unless trivial pairing). Avoid redundant calculations. Use python_repl ONLY for lightweight analysis, parsing generated files (e.g., extracting specific numbers, computing differences), summarizing results, or generating simple helper scripts—NOT for long-running ab initio tasks.
+ Step 3: After each tool execution, briefly interpret its output and decide next step; stop early if goal satisfied.
+ Step 4: Produce FINAL SUMMARY: goal, methods (key parameters: k-points, cutoffs, pseudopotentials), main results (energies etc.), validation notes, and recommended next steps or improvements.
 
-    3. STRUCTURE OPTIMIZATION & ANALYSIS:
-       - Perform geometry optimizations (geometry_optimization)
-       - Relax bulk and slab structures (relax_bulk, relax_slab)
-       - Generate k-point meshes (generate_kpoint_mesh)
-       - Get band structure paths (get_kpath_bandstructure)
+ERROR RECOVERY:
+ - If a tool error occurs: analyze likely cause, adjust parameters, retry (<=3 total attempts per failing logical step).
+ - Use error_handler tool if cause unclear after first failure.
+ - After exhausting retries: report failure reason + suggested manual fix.
 
-    4. MATERIALS DATABASE INTEGRATION:
-       - Search Materials Project database (search_materials_project)
-       - Analyze crystal structures (analyze_crystal_structure)
-       - Find pseudopotentials (find_pseudopotentials)
+STYLE & CONSTRAINTS:
+ - Do NOT expose raw tool JSON directly; interpret scientifically.
+ - When using python_repl, keep code concise, comment briefly, and avoid repeated large file reads; prefer targeted extraction.
+ - Never write outside the workspace and avoid overwriting important input/output files unless intentional & stated.
+ - Explain DFT concepts briefly when helpful (concise, no fluff).
+ - Ensure physical reasonableness (e.g., k-point density, vacuum thickness, cutoff ranges).
+ - Prefer convergence tests before production property calculations unless user declines.
+ - If prior results in state are reusable, reference them instead of recalculating.
+ - Always justify key parameter choices (e.g., k-point grid heuristic).
 
-    5. CONVERGENCE TESTING:
-       - Test k-point convergence (kpoint_convergence_test)
-       - Test cutoff energy convergence (cutoff_convergence_test)
-       - Test slab thickness convergence (slab_thickness_convergence)
-       - Test vacuum convergence (vacuum_convergence_test)
+If user only greets or asks basic theory: respond directly (no tools, but mention capabilities if relevant). If they request a workflow/action: create plan then use tools.
+"""
 
-    6. PROPERTY CALCULATIONS:
-       - Calculate adsorption energies (calculate_adsorption_energy)
-       - Calculate surface energies (calculate_surface_energy)
-       - Calculate formation energies (calculate_formation_energy)
-       - Validate calculations (validate_calculation)
 
-    7. DATABASE MANAGEMENT:
-       - Create calculation databases (create_calculations_database)
-       - Store and query calculations (store_calculation, query_calculations)
-       - Export results (export_results)
-       - Search similar calculations (search_similar_calculations)
-
-    8. ERROR HANDLING & TROUBLESHOOTING:
-       - Handle calculation errors (error_handler)
-       - Provide troubleshooting guidance
-
-    IMPORTANT GUIDELINES:
-    - Always break down complex workflows into logical steps
-    - Use appropriate convergence testing before production calculations
-    - Store important results in databases for future reference
-    - Provide clear explanations of DFT concepts and methods
-    - Suggest best practices for computational efficiency
-    - Handle errors gracefully and provide solutions
-    - Check input parameters for physical reasonableness
-    - Recommend appropriate k-point densities and cutoffs
-    - Consider system size effects and finite-size corrections
-    - Validate results against experimental data when available
-    - Document calculation parameters for reproducibility
-    - All calculation files are organized in user-specific workspaces under: {settings.ROOT_PATH}/WORKSPACE
-    - Each user gets their own workspace directory based on their chat session ID
-    - Files are automatically organized into subdirectories: structures/, calculations/, results/, etc.
-    - Always explain what each tool does and why you're using it
-    - Provide step-by-step workflows for complex DFT tasks
-
-    STATE MANAGEMENT:
-    You have access to a simple state that tracks:
-    - working_directory: Where all DFT files are stored
-    - current_structures: Recently created/loaded structures (max 5)
-    - last_calculation: Results from the most recent calculation
-    - current_workflow: Active workflow type (adsorption_energy, surface_energy, etc.)
-    - workflow_step: Current step number in the workflow
-
-    Use this state to:
-    - Reference previous calculations and structures
-    - Track progress through multi-step workflows
-    - Avoid repeating unnecessary calculations
-    - Provide context-aware assistance
-    """
+#############################################
+# Model Wrapper
+#############################################
 
 
 def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, AIMessage]:
@@ -221,122 +191,33 @@ def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, AIMessa
     return preprocessor | model
 
 
-async def acall_chat(state: AgentState, config: RunnableConfig) -> AgentState:
-    """Initial chat node for user interaction and workflow routing."""
-    # Initialize DFT state if not present
-    if "working_directory" not in state or "thread_id" not in state:
-        state.update(await initialize_agent_state(config))
-
-    # Simple chat instructions for initial interaction
-    chat_instructions = f"""
-    You are a friendly DFT (Density Functional Theory) assistant.
-
-    Your role is to:
-    1. Greet users and understand their computational materials science needs
-    2. Explain DFT concepts in simple terms when asked
-    3. Route complex DFT tasks to the specialized DFT agent
-    4. Provide quick answers for simple questions
-    5. Help users get started with DFT calculations
-
-    If the user asks for:
-    - Complex DFT calculations, workflows, or multi-step processes → Use tools
-    - Simple explanations, greetings, or general questions → Answer directly
-    - Help getting started → Provide guidance and then use tools if needed
-
-    Today's date is {datetime.now().strftime("%B %d, %Y")}.
-    """
-
-    m = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-    chat_model = m.bind_tools([])  # No tools for initial chat
-
-    preprocessor = RunnableLambda(
-        lambda state: [SystemMessage(content=chat_instructions)] + state["messages"],
-        name="ChatModifier",
-    )
-
-    chat_runnable = preprocessor | chat_model
-    response = await chat_runnable.ainvoke(state, config)
-
-    return {"messages": [response]}
-
-
 async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
-    """Main DFT agent node for complex calculations and workflows."""
-    # Initialize DFT state if not present
+    """Primary DFT agent reasoning / planning node."""
     if "working_directory" not in state or "thread_id" not in state:
         state.update(await initialize_agent_state(config))
 
     m = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
     model_runnable = wrap_model(m)
     response = await model_runnable.ainvoke(state, config)
-
-    # We return a list, because this will get added to the existing list
     return {"messages": [response]}
 
 
-def route_conversation(state: AgentState) -> str:
-    """Route conversation between chat and DFT agent based on last message."""
-    messages = state["messages"]
-    if not messages:
-        return "chat"
-
-    last_message = messages[-1]
-
-    # Check if the last message is from an AI and has tool calls
-    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-        return "tools"
-
-    # If it's the first user message or a simple question, go to chat first
-    user_messages = [
-        msg for msg in messages if hasattr(msg, "type") and msg.type == "human"
-    ]
-
-    if len(user_messages) <= 1:
-        return "chat"
-
-    # For subsequent messages, check if they need DFT tools
-    last_user_message = user_messages[-1].content.lower() if user_messages else ""
-
-    # Keywords that suggest DFT tool usage
-    dft_keywords = [
-        "calculate",
-        "generate",
-        "optimize",
-        "relax",
-        "convergence",
-        "structure",
-        "slab",
-        "bulk",
-        "adsorbate",
-        "energy",
-        "dft",
-        "quantum espresso",
-        "vasp",
-        "materials project",
-        "database",
-        "k-point",
-        "cutoff",
-        "pseudopotential",
-        "workflow",
-    ]
-
-    # If message contains DFT keywords or is asking for complex tasks, route to DFT agent
-    if any(keyword in last_user_message for keyword in dft_keywords):
-        return "dft_agent"
-
-    # Otherwise, handle with chat
-    return "chat"
+#############################################
+# Error Handling & Tool Execution
+#############################################
 
 
-# Agent functions
 def handle_tool_error(state) -> dict:
     error = state.get("error")
     tool_calls = state["messages"][-1].tool_calls
     return {
         "messages": [
             ToolMessage(
-                content=f"Error: {repr(error)}\n Please fix your mistakes and try again. "
-                f"If you need help, use the error_handler tool to get troubleshooting guidance.",
+                content=(
+                    "Error encountered: "
+                    f"{repr(error)}\nAttempt to diagnose, adjust parameters, and retry. "
+                    "If unclear, call error_handler tool. After 3 failed retries, summarize failure."
+                ),
                 tool_call_id=tc["id"],
             )
             for tc in tool_calls
@@ -345,12 +226,7 @@ def handle_tool_error(state) -> dict:
 
 
 async def custom_tool_node(state: AgentState, config: RunnableConfig) -> AgentState:
-    """Execute tool calls without blocking the event loop.
-
-    Any synchronous tool function is offloaded to a worker thread via
-    asyncio.to_thread. Native async tool functions (if added later) are
-    awaited directly.
-    """
+    """Execute tool calls asynchronously with thread/workspace injection and error capture."""
     thread_id = state.get("thread_id")
 
     messages = state["messages"]
@@ -364,21 +240,21 @@ async def custom_tool_node(state: AgentState, config: RunnableConfig) -> AgentSt
         tool_args = (tool_call["args"] or {}).copy()
 
         if thread_id and tool_name in TOOL_REGISTRY:
+            # Inject implicit workspace context
             tool_args["_thread_id"] = thread_id
 
-        tool_func = next((t for t in dft_tools if t.name == tool_name), None)
-
-        if not tool_func:
+        tool_spec = next((t for t in dft_tools if t.name == tool_name), None)
+        if not tool_spec:
             tool_messages.append(
                 ToolMessage(
-                    content=f"Tool {tool_name} not found",
+                    content=f"Tool {tool_name} not found. Suggest verifying name or updating registry.",
                     tool_call_id=tool_call["id"],
                 )
             )
             continue
 
         try:
-            fn = tool_func.func
+            fn = tool_spec.func
             if inspect.iscoroutinefunction(fn):
                 result = await fn(**tool_args)  # type: ignore[arg-type]
             else:
@@ -392,7 +268,7 @@ async def custom_tool_node(state: AgentState, config: RunnableConfig) -> AgentSt
         except Exception as e:
             tool_messages.append(
                 ToolMessage(
-                    content=f"Error executing {tool_name}: {e}",
+                    content=f"Execution error in {tool_name}: {e}",
                     tool_call_id=tool_call["id"],
                 )
             )
@@ -400,40 +276,25 @@ async def custom_tool_node(state: AgentState, config: RunnableConfig) -> AgentSt
     return {"messages": tool_messages}
 
 
-def create_tool_node_with_fallback(tools: list) -> dict:
-    # Return our custom tool node instead of the default ToolNode
-    return RunnableLambda(custom_tool_node)
+def create_tool_node_with_fallback(_tools: list) -> RunnableLambda:
+    return RunnableLambda(custom_tool_node).with_fallbacks(
+        [RunnableLambda(handle_tool_error)], exception_key="error"
+    )
 
 
-# Define the original DFT agent graph (kept for backward compatibility)
+#############################################
+# Graph Definition
+#############################################
+
 workflow = StateGraph(AgentState)
 
-# Define nodes
-workflow.add_node("chat", acall_chat)
-workflow.add_node("dft_agent", acall_model)
-workflow.add_node("tools", custom_tool_node)
+workflow.add_node("dft", acall_model)
+workflow.add_node("tools", create_tool_node_with_fallback(dft_tools))
 
-# Define edges
-workflow.set_entry_point("chat")
+workflow.set_entry_point("dft")
+workflow.add_conditional_edges("dft", tools_condition)
+workflow.add_edge("tools", "dft")
+workflow.add_edge("dft", END)
 
-# From chat, route to DFT agent or stay in chat
-workflow.add_conditional_edges(
-    "chat",
-    route_conversation,
-    {
-        "chat": "__end__",  # End conversation if handled by chat
-        "dft_agent": "dft_agent",  # Route to DFT agent for complex tasks
-    },
-)
-
-# From DFT agent, check for tool calls
-workflow.add_conditional_edges(
-    "dft_agent",
-    tools_condition,
-)
-
-# After tools, go back to DFT agent
-workflow.add_edge("tools", "dft_agent")
-
-# Compile the agent (no explicit checkpointer for in-memory dev use)
+# Export compiled graph
 dft_agent = workflow.compile()
