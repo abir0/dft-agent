@@ -11,6 +11,9 @@ from langchain_core.runnables import (
     RunnableSerializable,
 )
 from langchain_core.tools import tool
+import re
+import requests
+from bs4 import BeautifulSoup
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -49,7 +52,126 @@ def web_search(query: str) -> str:
         return f"Error searching for '{query}': {str(e)}"
 
 # Initialize base tools
-base_tools = [web_search, calculator, python_repl]
+@tool
+def fetch_open_access_full_text(url: str, max_chars: int = 60000) -> str:
+    """Fetch the full text of an open-access publication from a supplied URL.
+
+    Use this only when the paper search results indicate the paper is open access (isOpenAccess=true)
+    and a direct URL is provided. Attempts to extract readable text from HTML pages; if the URL points
+    to a PDF, extracts text using pypdf when available.
+
+    Args:
+        url: The open-access URL to the publication (HTML page or direct PDF link).
+        max_chars: Limit the returned text length to avoid overlong outputs.
+
+    Returns:
+        A plain-text string containing the best-effort extracted full text, truncated to max_chars.
+    """
+    try:
+        if not isinstance(url, str) or not re.match(r"^https?://", url):
+            return "Invalid URL. Please provide an http(s) URL."
+
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+            )
+        }
+        resp = requests.get(url, headers=headers, timeout=30)
+        if resp.status_code >= 400:
+            return f"Failed to fetch URL (status {resp.status_code})."
+
+        content_type = resp.headers.get("Content-Type", "").lower()
+
+        def _truncate(text: str) -> str:
+            return text if len(text) <= max_chars else text[:max_chars] + "\n...[truncated]"
+
+        # Handle PDFs
+        if "application/pdf" in content_type or url.lower().endswith(".pdf"):
+            try:
+                try:
+                    from pypdf import PdfReader  # type: ignore
+                except Exception:
+                    return (
+                        "PDF detected but PDF extraction dependency (pypdf) is not available. "
+                        "Please install 'pypdf' to enable PDF text extraction, or provide an HTML URL."
+                    )
+                from io import BytesIO
+
+                reader = PdfReader(BytesIO(resp.content))
+                pages = []
+                for i, page in enumerate(reader.pages):
+                    try:
+                        pages.append(page.extract_text() or "")
+                    except Exception:
+                        pages.append("")
+                text = "\n\n".join(pages).strip()
+                if not text:
+                    return "No extractable text found in PDF."
+                return _truncate(text)
+            except Exception as e:
+                return f"Error extracting text from PDF: {e}"
+
+        # Handle HTML, XML, and other text-like content
+        if any(t in content_type for t in [
+            "text/html",
+            "text/plain",
+            "application/xhtml+xml",
+            "application/xml",
+            "text/xml",
+        ]) or not content_type:
+            try:
+                html = resp.text
+                soup = BeautifulSoup(html, "html.parser")
+                # Remove non-content elements
+                for tag in soup(["script", "style", "noscript", "header", "footer", "form", "nav", "aside"]):
+                    tag.decompose()
+
+                # Heuristics to prioritize main article content
+                candidates = []
+                # Common containers
+                for sel in [
+                    "article",
+                    "main",
+                    "div[role='main']",
+                    ".article-content",
+                    ".article__body",
+                    ".c-article-body",
+                    "#content",
+                    "#main-content",
+                    ".content",
+                    ".main-content",
+                ]:
+                    candidates.extend(soup.select(sel))
+
+                def node_score(el) -> int:
+                    text = el.get_text(" ", strip=True)
+                    return len(text)
+
+                best = None
+                if candidates:
+                    best = max(candidates, key=node_score)
+
+                text = (best or soup.body or soup).get_text("\n", strip=True)
+                text = re.sub(r"\n{3,}", "\n\n", text)
+                if not text:
+                    return "No extractable text found on page."
+                return _truncate(text)
+            except Exception as e:
+                return f"Error extracting text from HTML: {e}"
+
+        # Unsupported content type
+        return f"Unsupported content type for extraction: {content_type or 'unknown'}"
+    except Exception as e:
+        return f"Unexpected error fetching full text: {e}"
+
+
+base_tools = [
+    web_search,
+    calculator,
+    python_repl,
+    fetch_open_access_full_text,
+]
 
 # Global variable to cache loaded tools
 _all_tools = None
@@ -110,6 +232,8 @@ instructions = f"""
     - Use the search_paper_by_title tool to find specific papers by their title.
     - Use the get_papers tool to get detailed information about specific papers using their ID.
     - Use the get_citations tool to find papers that cite a specific paper.
+    - When a paper result indicates isOpenAccess=true and provides a URL, use the
+      fetch_open_access_full_text tool to retrieve the article's full text for analysis.
     - Use the search_authors_by_name and get_author_papers tools to find papers by specific researchers.
     - If Asta scientific paper search tools return 403 Forbidden errors, inform the user that there may be an API key permission issue and suggest using web search instead.
     - Please include markdown-formatted links to any citations used in your response. Only include one

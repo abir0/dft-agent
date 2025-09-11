@@ -37,6 +37,7 @@ dependencies = [
     "python-dotenv",
     "python-multipart",
     "requests",
+    "pypdf",
     "seaborn",
     "seekpath",
     "setuptools",
