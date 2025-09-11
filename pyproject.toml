@@ -45,6 +45,7 @@ dependencies = [
     "tiktoken",
     "typing-extensions",
     "uvicorn",
+    "langchain-mcp-adapters>=0.1.9",
 ]
 
 [dependency-groups]
