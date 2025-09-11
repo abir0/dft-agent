@@ -109,19 +109,21 @@ def generate_qe_input(
         if ecutwfc <= 0:
             raise ValueError("ecutwfc must be positive")
 
-        if not os.path.exists(structure_file):
-            raise FileNotFoundError(f"Structure file not found: {structure_file}")
+        # Resolve structure file path relative to workspace if thread_id is provided
+        structure_path = Path(structure_file)
+        if not structure_path.exists():
+            raise FileNotFoundError(f"Structure file not found: {structure_path}")
 
         # Handle different input formats
-        if structure_file.endswith(".pwi") and calculation != "ensemble":
+        if str(structure_path).endswith(".pwi") and calculation != "ensemble":
             # For .pwi files, try to read the corresponding .pwo file first
-            pwo_file = structure_file.replace(".pwi", ".pwo")
+            pwo_file = str(structure_path).replace(".pwi", ".pwo")
             if os.path.exists(pwo_file):
                 atoms = read(pwo_file)
             else:
-                atoms = read(structure_file)
+                atoms = read(str(structure_path))
         else:
-            atoms = read(structure_file)
+            atoms = read(str(structure_path))
 
         # Get unique elements and validate structure
         elements = sorted(list(set(atoms.get_chemical_symbols())))
@@ -206,20 +208,8 @@ def generate_qe_input(
             input_data["system"].pop("smearing", None)
             input_data["system"].pop("degauss", None)
 
-        # Generate output directory and filename
-        input_path = Path(structure_file)
-
         # Use workspace-specific directory if thread_id is available
-        if _thread_id:
-            try:
-                output_dir = get_subdir_path(_thread_id, "calculations/qe_inputs")
-            except NameError:
-                # Fallback if get_subdir_path is not available
-                output_dir = Path(f"workspace_{_thread_id}/calculations/qe_inputs")
-                output_dir.mkdir(parents=True, exist_ok=True)
-        else:
-            output_dir = input_path.parent / "qe_inputs"
-            output_dir.mkdir(parents=True, exist_ok=True)
+        output_dir = get_subdir_path(_thread_id, "calculations/qe_inputs")
 
         # Generate filename
         input_filename = f"{job_name}_{calculation}"
@@ -269,21 +259,6 @@ def generate_qe_input(
         with open(metadata_file, "w") as f:
             json.dump(job_info, f, indent=2)
 
-        # Create run script
-        script_file = output_dir / f"run_{job_name}_{calculation}.sh"
-        with open(script_file, "w") as f:
-            f.write("#!/bin/bash\n")
-            f.write(f"# QE {calculation} calculation for {job_name}\n")
-            f.write(f"# Generated from: {structure_file}\n")
-            f.write(f"pw.x < {input_filename} > {job_name}_{calculation}.pwo 2>&1\n\n")
-            f.write('if grep -q "JOB DONE" *.pwo; then\n')
-            f.write('    echo "Calculation completed successfully"\n')
-            f.write("else\n")
-            f.write('    echo "Calculation may have failed - check output file"\n')
-            f.write("    exit 1\n")
-            f.write("fi\n")
-        script_file.chmod(0o755)
-
         # Calculate estimated memory usage
         mem_estimate = nat * ntyp * ecutwfc * 0.1  # Very rough estimate in MB
 
@@ -296,7 +271,6 @@ def generate_qe_input(
             f"  Cutoffs: wfc={ecutwfc} Ry, rho={ecutrho} Ry\n"
             f"  Occupation: {occupations}\n"
             f"  Estimated memory: ~{mem_estimate:.1f} MB\n"
-            f"  Run script: {script_file}\n"
             f"  Metadata: {metadata_file}"
         )
 
@@ -335,6 +309,7 @@ def submit_local_job(
                 }
                 continue
 
+            # Handle .pwi input files by creating a new script
             output_file = input_path.with_suffix(".pwo")
 
             # Prepare MPI command
@@ -352,7 +327,7 @@ def submit_local_job(
             job_script = job_dir / f"job_{calc_type}_{input_path.stem}.sh"
             with open(job_script, "w") as f:
                 f.write("#!/bin/bash\n")
-                f.write(f"# Local QE job for {calc_type}\n\n")
+                f.write(f"# Local QE job for {calc_type} : {input_path.stem}\n\n")
                 f.write(f"cd {input_path.parent}\n")
                 f.write(f"echo 'Starting {calc_type} calculation at $(date)'\n")
                 f.write(f"echo 'Using {num_cores} cores, memory limit {memory_limit}'\n")
@@ -367,7 +342,9 @@ def submit_local_job(
                     ["bash", str(job_script)],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    cwd=input_path.parent,
+                    cwd=job_script.parent
+                    if input_path.suffix == ".sh"
+                    else input_path.parent,
                 )
 
                 job_results[calc_type] = {
@@ -386,10 +363,18 @@ def submit_local_job(
                     "status": "failed_to_submit",
                 }
 
-        # Save job metadata
-        jobs_file = job_dir / "job_status.json"
-        with open(jobs_file, "w") as f:
-            json.dump(job_results, f, indent=2)
+        # Save job metadata (use the parent directory of the last processed file)
+        jobs_file = None
+        if job_results:
+            last_input = list(input_files.values())[-1]
+            metadata_dir = Path(last_input).parent
+            if Path(last_input).suffix != ".sh":
+                metadata_dir = metadata_dir / "jobs"
+                metadata_dir.mkdir(exist_ok=True)
+
+            jobs_file = metadata_dir / "job_status.json"
+            with open(jobs_file, "w") as f:
+                json.dump(job_results, f, indent=2)
 
         # Summary
         summary = f"Submitted {len(input_files)} local jobs:\n"
@@ -403,7 +388,8 @@ def submit_local_job(
                     f"- {calc_type}: {result['status']} - {result.get('error', '')}\n"
                 )
 
-        summary += f"\nJob status saved to: {jobs_file}"
+        if jobs_file:
+            summary += f"\nJob status saved to: {jobs_file}"
         return summary
 
     except Exception as e:
@@ -412,7 +398,9 @@ def submit_local_job(
 
 @tool
 def check_job_status(
-    job_id: str, queue_system: str = "local", remote_host: Optional[str] = None
+    job_id: str,
+    queue_system: str = "local",
+    remote_host: Optional[str] = None,
 ) -> str:
     """Monitor job execution status.
 
@@ -565,7 +553,9 @@ def read_output_file(
 
 @tool
 def extract_energy(
-    output_data: Dict[str, Any], energy_type: str = "total", units: str = "eV"
+    output_data: Dict[str, Any],
+    energy_type: str = "total",
+    units: str = "eV",
 ) -> str:
     """Extract total energy from calculation results.
 

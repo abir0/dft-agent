@@ -241,8 +241,13 @@ async def custom_tool_node(state: AgentState, config: RunnableConfig) -> AgentSt
     for tool_call in last_message.tool_calls:
         tool_name = tool_call["name"]
         tool_args = (tool_call["args"] or {}).copy()
+        tool_func = TOOL_REGISTRY[tool_name]
 
-        if thread_id and tool_name in TOOL_REGISTRY:
+        if (
+            thread_id
+            and "_thread_id" in tool_func.__annotations__
+            and "_thread_id" not in tool_args
+        ):
             # Inject implicit workspace context
             tool_args["_thread_id"] = thread_id
 

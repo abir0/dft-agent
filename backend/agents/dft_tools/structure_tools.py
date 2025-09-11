@@ -74,11 +74,7 @@ def generate_bulk(
         conventional = sga.get_conventional_standard_structure()
 
         # File paths
-        if _thread_id:
-            output_dir = get_subdir_path(_thread_id, "structures/bulk")
-        else:
-            output_dir = Path("structures/bulk")
-            output_dir.mkdir(parents=True, exist_ok=True)
+        output_dir = get_subdir_path(_thread_id, "structures/bulk")
 
         stem = f"{element}_{crystal}_a{a:.2f}"
         if c_over_a:
@@ -100,16 +96,6 @@ def generate_bulk(
             "crystal_structure": crystal,
             "lattice_parameter_a": a,
             "c_over_a": c_over_a,
-            "num_atoms": len(atoms),
-            "cell_volume": atoms.get_volume(),
-            "formula": atoms.get_chemical_formula(),
-            "filepath": str(cif_path),
-        }
-        metadata = {
-            "element": element,
-            "crystal_structure": crystal,
-            "lattice_parameter_a": a,
-            "c_over_a": c_over_a,
             "num_atoms_primitive": primitive.num_sites,
             "num_atoms_conventional": conventional.num_sites,
             "cell_volume_primitive": primitive.volume,
@@ -120,9 +106,6 @@ def generate_bulk(
             "space_group_number": sga.get_space_group_number(),
             "space_group_symbol": sga.get_space_group_symbol(),
             "point_group": sga.get_point_group_symbol(),
-            "structure_id": primitive.composition.reduced_formula
-            + "_"
-            + sga.get_space_group_symbol(),
             "files": {
                 "cif": str(cif_path),
                 "xyz": str(xyz_path),
@@ -139,7 +122,8 @@ def generate_bulk(
             f"({primitive.num_sites} atoms primitive, "
             f"space-group {sga.get_space_group_number()} "
             f"{sga.get_space_group_symbol()}). "
-            f"Files saved to {output_dir}"
+            f"Files saved to: {output_dir} "
+            f"with CIF file: {str(cif_path.name)}"
         )
 
     except Exception as exc:
@@ -164,12 +148,12 @@ def create_supercell(
         String with supercell information and file path
     """
     try:
-        if scaling_matrix is None:
-            scaling_matrix = [2, 2, 2]
-
+        # Set structure
         atoms = read(structure_file)
 
         # Create supercell
+        if scaling_matrix is None:
+            scaling_matrix = [2, 2, 2]
         supercell = atoms * scaling_matrix
 
         if wrap_atoms:
@@ -177,13 +161,8 @@ def create_supercell(
 
         input_path = Path(structure_file)
 
-        # Use workspace-specific directory if thread_id is available
-        if _thread_id:
-            output_dir = get_subdir_path(_thread_id, "structures/supercells")
-        else:
-            # Fallback to input file's parent directory
-            output_dir = input_path.parent / "supercells"
-            output_dir.mkdir(parents=True, exist_ok=True)
+        # Use workspace-specific directory
+        output_dir = get_subdir_path(_thread_id, "structures/supercells")
 
         scale_str = "x".join(map(str, scaling_matrix))
         stem = f"{input_path.stem}_supercell_{scale_str}"
@@ -240,13 +219,12 @@ def generate_slab(
         String with slab information and file path
     """
     try:
-        # Set default miller indices if not provided
-        if miller_indices is None:
-            miller_indices = [1, 1, 1]
-
+        # Set up bulk structure
         bulk_atoms = read(structure_file)
 
         # Create slab
+        if miller_indices is None:
+            miller_indices = [1, 1, 1]
         slab = surface(bulk_atoms, miller_indices, layers, vacuum)
 
         if orthogonal:
@@ -256,11 +234,7 @@ def generate_slab(
             # Simple orthogonalization - may need improvement for complex cases
 
         input_path = Path(structure_file)
-        if _thread_id:
-            output_dir = get_subdir_path(_thread_id, "structures/slabs")
-        else:
-            output_dir = input_path.parent / "slabs"
-            output_dir.mkdir(parents=True, exist_ok=True)
+        output_dir = get_subdir_path(_thread_id, "structures/slabs")
 
         miller_str = "".join(map(str, miller_indices))
         stem = f"{input_path.stem}_slab_{miller_str}_{layers}L_vac{vacuum:.1f}"
@@ -367,11 +341,7 @@ def add_adsorbate(
         ase_add_adsorbate(slab, adsorbate, height, position=tuple(site_position))
 
         input_path = Path(slab_file)
-        if _thread_id:
-            output_dir = get_subdir_path(_thread_id, "structures/with_adsorbates")
-        else:
-            output_dir = input_path.parent / "with_adsorbates"
-            output_dir.mkdir(parents=True, exist_ok=True)
+        output_dir = get_subdir_path(_thread_id, "structures/with_adsorbates")
 
         pos_str = f"x{site_position[0]:.2f}y{site_position[1]:.2f}"
         stem = f"{input_path.stem}_{adsorbate_formula}_{pos_str}_h{height:.1f}"
@@ -429,11 +399,8 @@ def add_vacuum(
         atoms.center(vacuum=thickness / 2, axis=axis)
 
         input_path = Path(structure_file)
-        if _thread_id:
-            output_dir = get_subdir_path(_thread_id, "structures/with_vacuum")
-        else:
-            output_dir = input_path.parent / "with_vacuum"
-            output_dir.mkdir(parents=True, exist_ok=True)
+        # Use workspace-specific directory
+        output_dir = get_subdir_path(_thread_id, "structures/with_vacuum")
 
         axis_name = ["x", "y", "z"][axis]
         stem = f"{input_path.stem}_vac{axis_name}{thickness:.1f}"
