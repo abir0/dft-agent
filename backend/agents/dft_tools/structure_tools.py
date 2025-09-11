@@ -6,7 +6,7 @@ Core tools for generating and manipulating atomic structures using ASE.
 
 import json
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 from ase import Atoms
 from ase.build import add_adsorbate as ase_add_adsorbate
@@ -302,7 +302,7 @@ def generate_slab(
 def add_adsorbate(
     slab_file: str,
     adsorbate_formula: str,
-    site_position: Tuple[float, float] = (0.5, 0.5),
+    site_position: Optional[List[float]] = None,
     height: float = 2.0,
     coverage: Optional[float] = None,
     _thread_id: Optional[str] = None,
@@ -312,7 +312,7 @@ def add_adsorbate(
     Args:
         slab_file: Path to slab structure file
         adsorbate_formula: Adsorbate formula/name (e.g., 'CO', 'H', 'O', 'CH4')
-        site_position: Fractional coordinates on surface (x, y)
+        site_position: Two fractional surface coordinates [x, y] each between 0 and 1
         height: Height above surface in Angstrom
         coverage: Surface coverage (if specified, will add multiple adsorbates)
 
@@ -320,6 +320,24 @@ def add_adsorbate(
         String with adsorbate information and file path
     """
     try:
+        # Default center of surface if not provided
+        if site_position is None:
+            site_position = [0.5, 0.5]
+
+        # Validate site_position early for clearer error messages & proper schema
+        if not isinstance(site_position, (list, tuple)):
+            return "Error: site_position must be a list like [x, y]."
+        if len(site_position) != 2:
+            return "Error: site_position must have exactly two values [x, y]."
+        try:
+            sx, sy = float(site_position[0]), float(site_position[1])
+        except Exception:
+            return "Error: site_position values must be numeric."
+        if not (0.0 <= sx <= 1.0 and 0.0 <= sy <= 1.0):
+            return "Error: site_position values must be within [0, 1]."
+
+        site_position = [sx, sy]
+
         slab = read(slab_file)
 
         # Create adsorbate molecule
@@ -346,7 +364,7 @@ def add_adsorbate(
                 adsorbate = Atoms(adsorbate_formula)
 
         # Add adsorbate to slab
-        ase_add_adsorbate(slab, adsorbate, height, position=site_position)
+        ase_add_adsorbate(slab, adsorbate, height, position=tuple(site_position))
 
         input_path = Path(slab_file)
         if _thread_id:
