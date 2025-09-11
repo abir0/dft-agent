@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from langgraph.graph.state import CompiledStateGraph
 
 from backend.agents.library.chatbot import chatbot
-from backend.agents.library.dft_agent.agent import dft_agent
+from backend.agents.library.dft_agent import dft_agent
 from backend.core import AgentInfo
 
 DEFAULT_AGENT = "dft_agent"
