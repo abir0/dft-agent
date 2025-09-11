@@ -123,9 +123,9 @@ def generate_qe_input(
         if _thread_id:
             output_dir = get_subdir_path(_thread_id, "calculations/qe_inputs")
         else:
-            # Fallback to input file's parent directory
-            output_dir = input_path.parent / "qe_inputs"
-            output_dir.mkdir(exist_ok=True)
+            # Fallback to outputs directory
+            output_dir = Path("data/outputs/calculations/qe_inputs")
+            output_dir.mkdir(parents=True, exist_ok=True)
 
         input_filename = f"{job_name}_{calculation}.pwi"
         input_filepath = output_dir / input_filename

@@ -55,8 +55,8 @@ def generate_bulk(
         if _thread_id:
             output_dir = get_subdir_path(_thread_id, "structures/bulk")
         else:
-            # Fallback to current working directory if no thread_id
-            output_dir = Path("structures/bulk")
+            # Fallback to outputs directory if no thread_id
+            output_dir = Path("data/outputs/structures/bulk")
             output_dir.mkdir(parents=True, exist_ok=True)
 
         # Generate filename
@@ -133,9 +133,9 @@ def create_supercell(
         if _thread_id:
             output_dir = get_subdir_path(_thread_id, "structures/supercells")
         else:
-            # Fallback to input file's parent directory
-            output_dir = input_path.parent / "supercells"
-            output_dir.mkdir(exist_ok=True)
+            # Fallback to outputs directory
+            output_dir = Path("data/outputs/structures/supercells")
+            output_dir.mkdir(parents=True, exist_ok=True)
 
         scale_str = "x".join(map(str, scaling_matrix))
         output_filename = f"{input_path.stem}_supercell_{scale_str}{input_path.suffix}"
@@ -215,9 +215,9 @@ def generate_slab(
         if _thread_id:
             output_dir = get_subdir_path(_thread_id, "structures/slabs")
         else:
-            # Fallback to input file's parent directory
-            output_dir = input_path.parent / "slabs"
-            output_dir.mkdir(exist_ok=True)
+            # Fallback to outputs directory
+            output_dir = Path("data/outputs/structures/slabs")
+            output_dir.mkdir(parents=True, exist_ok=True)
 
         miller_str = "".join(map(str, miller_indices))
         output_filename = f"{input_path.stem}_slab_{miller_str}_{layers}L_vac{vacuum:.1f}{input_path.suffix}"
@@ -261,7 +261,8 @@ def generate_slab(
 def add_adsorbate(
     slab_file: str,
     adsorbate_formula: str,
-    site_position: Tuple[float, float] = (0.5, 0.5),
+    site_position_x: float = 0.5,
+    site_position_y: float = 0.5,
     height: float = 2.0,
     coverage: Optional[float] = None,
     _thread_id: Optional[str] = None,
@@ -271,7 +272,8 @@ def add_adsorbate(
     Args:
         slab_file: Path to slab structure file
         adsorbate_formula: Adsorbate formula/name (e.g., 'CO', 'H', 'O', 'CH4')
-        site_position: Fractional coordinates on surface (x, y)
+        site_position_x: X fractional coordinate on surface (0.0-1.0)
+        site_position_y: Y fractional coordinate on surface (0.0-1.0)
         height: Height above surface in Angstrom
         coverage: Surface coverage (if specified, will add multiple adsorbates)
 
@@ -306,6 +308,7 @@ def add_adsorbate(
                 adsorbate = Atoms(adsorbate_formula)
 
         # Add adsorbate to slab
+        site_position = (site_position_x, site_position_y)
         ase_add_adsorbate(slab, adsorbate, height, position=site_position)
 
         # Generate output filename
@@ -315,9 +318,9 @@ def add_adsorbate(
         if _thread_id:
             output_dir = get_subdir_path(_thread_id, "structures/with_adsorbates")
         else:
-            # Fallback to input file's parent directory
-            output_dir = input_path.parent / "with_adsorbates"
-            output_dir.mkdir(exist_ok=True)
+            # Fallback to outputs directory
+            output_dir = Path("data/outputs/structures/with_adsorbates")
+            output_dir.mkdir(parents=True, exist_ok=True)
 
         pos_str = f"x{site_position[0]:.2f}y{site_position[1]:.2f}"
         output_filename = f"{input_path.stem}_{adsorbate_formula}_{pos_str}_h{height:.1f}{input_path.suffix}"

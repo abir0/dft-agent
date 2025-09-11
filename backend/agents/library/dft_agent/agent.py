@@ -22,7 +22,7 @@ from langgraph.prebuilt import tools_condition
 from backend.agents.llm import get_model, settings
 from backend.utils.workspace import extract_thread_id_from_config, get_workspace_path
 
-from .tool_registry import TOOL_REGISTRY
+from backend.agents.dft_tools.tool_registry import TOOL_REGISTRY
 
 
 class PlanStep:

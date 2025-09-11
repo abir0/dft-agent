@@ -247,7 +247,7 @@ def find_pseudopotentials(
     pp_library: str = "psl",
     functional: str = "pbe",
 ) -> str:
-    """Find and validate pseudopotentials for elements.
+    """Find and validate pseudopotentials for elements using pslibrary database.
 
     Args:
         elements: List of chemical elements
@@ -259,111 +259,87 @@ def find_pseudopotentials(
         Information about available pseudopotentials
     """
     try:
-        # Common pseudopotential naming conventions
-        pp_mappings = {
-            "psl": {
-                "pbe": {
-                    "H": "H.pbe-rrkjus_psl.1.0.0.UPF",
-                    "He": "He.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "Li": "Li.pbe-s-rrkjus_psl.1.0.0.UPF",
-                    "Be": "Be.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "B": "B.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "C": "C.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "N": "N.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "O": "O.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "F": "F.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "Ne": "Ne.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "Na": "Na.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Mg": "Mg.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Al": "Al.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "Si": "Si.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "P": "P.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "S": "S.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "Cl": "Cl.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "Ar": "Ar.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "K": "K.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Ca": "Ca.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Ti": "Ti.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "V": "V.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Cr": "Cr.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Mn": "Mn.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Fe": "Fe.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Co": "Co.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Ni": "Ni.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Cu": "Cu.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Zn": "Zn.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Ga": "Ga.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Ge": "Ge.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "As": "As.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "Se": "Se.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "Br": "Br.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "Kr": "Kr.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "Pt": "Pt.pbe-spfn-rrkjus_psl.1.0.0.UPF",
-                    "Au": "Au.pbe-spfn-rrkjus_psl.1.0.0.UPF",
-                }
-            }
-        }
-
+        # Load pslibrary database
+        pp_db_path = Path("data/inputs/pseudopotentials/pslibrary_database.json")
+        if not pp_db_path.exists():
+            return "Error: pslibrary database not found. Please ensure the database is created."
+        
+        with open(pp_db_path, 'r') as f:
+            pp_database = json.load(f)
+        
         # Find pseudopotentials for requested elements
         found_pps = {}
         missing_pps = []
-
+        pp_details = {}
+        
         for element in elements:
-            if (
-                pp_library in pp_mappings
-                and functional in pp_mappings[pp_library]
-                and element in pp_mappings[pp_library][functional]
-            ):
-                found_pps[element] = pp_mappings[pp_library][functional][element]
-            else:
-                # Generate a generic filename
-                if pp_library == "psl":
-                    if element in ["H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne"]:
-                        suffix = "rrkjus_psl.1.0.0.UPF"
-                    else:
-                        suffix = "spn-rrkjus_psl.1.0.0.UPF"
-                    pp_filename = f"{element}.{functional}-{suffix}"
+            element = element.capitalize()
+            
+            if element in pp_database['pseudopotentials']:
+                element_pps = pp_database['pseudopotentials'][element]['available_pseudopotentials']
+                
+                # Find matching pseudopotential
+                matching_pp = None
+                for pp in element_pps:
+                    if (pp['functional'] == functional and 
+                        pp['type'].lower() == pp_type.lower() and
+                        pp['recommended']):
+                        matching_pp = pp
+                        break
+                
+                if matching_pp:
+                    found_pps[element] = matching_pp['filename']
+                    pp_details[element] = {
+                        'filename': matching_pp['filename'],
+                        'type': matching_pp['type'],
+                        'functional': matching_pp['functional'],
+                        'quality': matching_pp['quality'],
+                        'relativistic': matching_pp['relativistic'],
+                        'cutoff_energy': matching_pp['cutoff_energy'],
+                        'description': matching_pp['description']
+                    }
                 else:
-                    pp_filename = f"{element}.{functional}-{pp_type}.UPF"
-
-                found_pps[element] = pp_filename
+                    missing_pps.append(element)
+            else:
                 missing_pps.append(element)
-
+        
         # Create output directory and save PP mapping
-        output_dir = Path("pseudopotentials")
-        output_dir.mkdir(exist_ok=True)
-
+        output_dir = Path("data/outputs/pseudopotentials")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
         pp_data = {
             "elements": elements,
             "pp_type": pp_type,
             "pp_library": pp_library,
             "functional": functional,
             "pseudopotentials": found_pps,
-            "missing_or_generic": missing_pps,
-            "notes": "Verify pseudopotential files exist in your PP directory",
+            "pseudopotential_details": pp_details,
+            "missing_elements": missing_pps,
+            "source": "pslibrary",
+            "notes": "Pseudopotentials from pslibrary database"
         }
-
+        
         pp_file = output_dir / f"pp_mapping_{functional}_{pp_library}.json"
         with open(pp_file, "w") as f:
             json.dump(pp_data, f, indent=2)
-
-        # Create summary
-        summary = f"Pseudopotential mapping for {len(elements)} elements:\\n"
-        summary += f"Functional: {functional.upper()}, Library: {pp_library.upper()}, Type: {pp_type.upper()}\\n\\n"
-
-        for element in elements:
-            summary += f"{element}: {found_pps[element]}"
-            if element in missing_pps:
-                summary += " (verify availability)"
-            summary += "\\n"
-
-        summary += f"\\nMapping saved to: {pp_file}"
-
+        
+        summary = f"Found pseudopotentials for {len(found_pps)} elements:\n"
+        for element, pp_file in found_pps.items():
+            details = pp_details[element]
+            summary += f"  {element}: {pp_file}\n"
+            summary += f"    Type: {details['type']}, Quality: {details['quality']}\n"
+            summary += f"    Cutoff: {details['cutoff_energy']['ecutwfc']} Ry\n"
+            if details['relativistic']:
+                summary += f"    Relativistic: Yes\n"
+            summary += "\n"
+        
+        summary += f"Mapping saved to: {pp_file}"
+        
         if missing_pps:
-            summary += f"\\n\\nNote: Please verify availability of pseudopotentials for: {', '.join(missing_pps)}"
-
+            summary += f"\n\nMissing pseudopotentials for: {', '.join(missing_pps)}"
+        
         return summary
-
+        
     except Exception as e:
         return f"Error finding pseudopotentials: {str(e)}"
 

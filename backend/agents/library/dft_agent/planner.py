@@ -28,7 +28,7 @@ from backend.agents.llm import get_model, settings
 
 from .agent import custom_tool_node, dft_tools, initialize_dft_state
 from .plan import Plan, PlanStatus, StepStatus
-from .tool_registry import TOOL_REGISTRY
+from backend.agents.dft_tools.tool_registry import TOOL_REGISTRY
 
 
 class PlannerState(MessagesState, total=False):

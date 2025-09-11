@@ -12,12 +12,13 @@ agent = get_agent(DEFAULT_AGENT)
 
 
 async def main() -> None:
-    inputs = {"messages": [("user", "Which are the top iPaaS services?")]}
-    result = await agent.acall_model(
+    from langchain_core.messages import HumanMessage
+    inputs = {"messages": [HumanMessage(content="Which are the top iPaaS services?")]}
+    result = await agent.ainvoke(
         inputs,
-        config=RunnableConfig(configurable={"thread_id": uuid4()}),
+        config=RunnableConfig(configurable={"thread_id": str(uuid4())}),
     )
-    result["messages"][-1].pretty_print()
+    print(result["messages"][-1].content)
 
 
 if __name__ == "__main__":
