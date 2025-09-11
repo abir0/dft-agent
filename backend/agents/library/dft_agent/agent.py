@@ -5,8 +5,10 @@ A comprehensive DFT agent that orchestrates computational materials science work
 using the DFT tools package.
 """
 
+import asyncio
+import inspect
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
@@ -15,91 +17,15 @@ from langchain_core.runnables import (
     RunnableLambda,
     RunnableSerializable,
 )
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import tools_condition
 
+from backend.agents.library.dft_agent.tool_registry import TOOL_REGISTRY
 from backend.agents.llm import get_model, settings
-from backend.utils.workspace import extract_thread_id_from_config, get_workspace_path
-
-from .tool_registry import TOOL_REGISTRY
-
-
-class PlanStep:
-    """Simple plan step for DFT workflows."""
-
-    def __init__(self, tool_name: str, description: str, args: Dict[str, Any] = None):
-        self.tool_name = tool_name
-        self.description = description
-        self.args = args or {}
-        self.status = "pending"  # pending, completed, failed
-        self.result = None
-        self.error = None
-
-
-class Plan:
-    """Simple editable plan for DFT workflows."""
-
-    def __init__(self, title: str = "DFT Plan", goal: str = ""):
-        self.title = title
-        self.goal = goal
-        self.steps: List[PlanStep] = []
-        self.current_step = 0
-
-    def add_step(self, tool_name: str, description: str, args: Dict[str, Any] = None):
-        """Add a step to the plan."""
-        step = PlanStep(tool_name, description, args)
-        self.steps.append(step)
-        return step
-
-    def get_current_step(self) -> Optional[PlanStep]:
-        """Get the current step to execute."""
-        if self.current_step < len(self.steps):
-            return self.steps[self.current_step]
-        return None
-
-    def execute_next_step(self, thread_id: str = None) -> Dict[str, Any]:
-        """Execute the next step in the plan."""
-        step = self.get_current_step()
-        if not step:
-            return {"status": "completed", "message": "All steps completed"}
-
-        try:
-            # Get the tool
-            tool_func = TOOL_REGISTRY.get(step.tool_name)
-            if not tool_func:
-                raise ValueError(f"Tool '{step.tool_name}' not found")
-
-            # Prepare arguments
-            args = step.args.copy()
-            if thread_id:
-                args["_thread_id"] = thread_id
-
-            # Execute the tool
-            result = tool_func.func(**args)
-
-            # Mark step as completed
-            step.status = "completed"
-            step.result = result
-            self.current_step += 1
-
-            return {
-                "status": "success",
-                "step": step.description,
-                "result": result,
-                "remaining_steps": len(self.steps) - self.current_step,
-            }
-
-        except Exception as e:
-            step.status = "failed"
-            step.error = str(e)
-            return {"status": "failed", "step": step.description, "error": str(e)}
-
-    def get_progress(self) -> str:
-        """Get plan progress as a string."""
-        completed = len([s for s in self.steps if s.status == "completed"])
-        total = len(self.steps)
-        return f"{completed}/{total} steps completed"
+from backend.utils.workspace import (
+    async_get_workspace_path,
+    extract_thread_id_from_config,
+)
 
 
 class AgentState(MessagesState, total=False):
@@ -133,18 +59,17 @@ class AgentState(MessagesState, total=False):
     # Simple step counter for workflows
     workflow_step: int
 
-    # Plan management
-    current_plan: Optional[Plan]
-
 
 # Get all DFT tools from registry
 dft_tools = list(TOOL_REGISTRY.values())
 
 
-def initialize_dft_state(config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Initialize default DFT agent state with workspace support."""
+async def initialize_agent_state(
+    config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Initialize default DFT agent state with workspace support (non-blocking)."""
     thread_id = extract_thread_id_from_config(config)
-    workspace_path = get_workspace_path(thread_id)
+    workspace_path = await async_get_workspace_path(thread_id)
 
     return {
         "working_directory": str(workspace_path),
@@ -153,7 +78,6 @@ def initialize_dft_state(config: Optional[Dict[str, Any]] = None) -> Dict[str, A
         "last_calculation": None,
         "current_workflow": None,
         "workflow_step": 0,
-        "current_plan": None,
     }
 
 
@@ -192,50 +116,6 @@ def reset_workflow(state: AgentState) -> AgentState:
     return {**state, "current_workflow": None, "workflow_step": 0}
 
 
-def create_plan_from_request(request: str) -> Plan:
-    """Create a simple plan from user request."""
-    # Simple plan creation based on common DFT workflows
-    plan = Plan(title="DFT Workflow", goal=request)
-
-    # Example plan patterns (you can extend this)
-    if "adsorption" in request.lower():
-        plan.add_step(
-            "generate_bulk",
-            "Create bulk structure",
-            {"element": "Pt", "crystal_structure": "fcc"},
-        )
-        plan.add_step(
-            "generate_slab", "Generate surface slab", {"miller_indices": [1, 1, 1]}
-        )
-        plan.add_step("add_adsorbate", "Add adsorbate molecule", {"adsorbate": "CO"})
-        plan.add_step("generate_vasp_scf_input", "Create VASP input", {"encut": 400})
-    elif "bulk" in request.lower():
-        plan.add_step("generate_bulk", "Create bulk structure", {})
-        plan.add_step("generate_vasp_scf_input", "Create VASP SCF input", {})
-    elif "surface" in request.lower():
-        plan.add_step("generate_bulk", "Create bulk structure", {})
-        plan.add_step("generate_slab", "Generate surface slab", {})
-        plan.add_step("generate_vasp_scf_input", "Create VASP input", {})
-
-    return plan
-
-
-def update_current_plan(state: AgentState, plan: Plan) -> AgentState:
-    """Update the current plan in state."""
-    return {**state, "current_plan": plan}
-
-
-def execute_plan_step(state: AgentState) -> Dict[str, Any]:
-    """Execute the next step in the current plan."""
-    current_plan = state.get("current_plan")
-    if not current_plan:
-        return {"error": "No active plan"}
-
-    thread_id = state.get("thread_id")
-    result = current_plan.execute_next_step(thread_id)
-    return result
-
-
 # System message for DFT agent
 current_date = datetime.now().strftime("%B %d, %Y")
 
@@ -250,13 +130,6 @@ instructions = f"""
     - Plans consist of sequential steps using available tools
     - Each plan has a goal and breaks complex workflows into manageable steps
     - You can execute plans step-by-step and track progress
-
-    PLAN COMMANDS:
-    - "create plan for [task]" - Generate a new workflow plan
-    - "execute plan" or "run plan" - Execute the current plan step by step
-    - "execute next step" - Run the next step in the plan
-    - "show plan" - Display the current plan and progress
-    - "modify plan" - Add, remove, or change plan steps
 
     Your capabilities include:
 
@@ -352,7 +225,7 @@ async def acall_chat(state: AgentState, config: RunnableConfig) -> AgentState:
     """Initial chat node for user interaction and workflow routing."""
     # Initialize DFT state if not present
     if "working_directory" not in state or "thread_id" not in state:
-        state.update(initialize_dft_state(config))
+        state.update(await initialize_agent_state(config))
 
     # Simple chat instructions for initial interaction
     chat_instructions = f"""
@@ -391,7 +264,7 @@ async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
     """Main DFT agent node for complex calculations and workflows."""
     # Initialize DFT state if not present
     if "working_directory" not in state or "thread_id" not in state:
-        state.update(initialize_dft_state(config))
+        state.update(await initialize_agent_state(config))
 
     m = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
     model_runnable = wrap_model(m)
@@ -472,54 +345,57 @@ def handle_tool_error(state) -> dict:
 
 
 async def custom_tool_node(state: AgentState, config: RunnableConfig) -> AgentState:
-    """Custom tool node that injects thread_id into tool calls."""
+    """Execute tool calls without blocking the event loop.
+
+    Any synchronous tool function is offloaded to a worker thread via
+    asyncio.to_thread. Native async tool functions (if added later) are
+    awaited directly.
+    """
     thread_id = state.get("thread_id")
 
-    # Get the last message to process tool calls
     messages = state["messages"]
     last_message = messages[-1]
-
     if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
         return {"messages": []}
 
-    # Process each tool call
-    tool_messages = []
-
+    tool_messages: list[ToolMessage] = []
     for tool_call in last_message.tool_calls:
         tool_name = tool_call["name"]
-        tool_args = tool_call["args"].copy()  # Copy to avoid modifying original
+        tool_args = (tool_call["args"] or {}).copy()
 
-        # Inject thread_id for DFT tools
         if thread_id and tool_name in TOOL_REGISTRY:
             tool_args["_thread_id"] = thread_id
 
-        # Find and execute the tool
-        tool_func = None
-        for tool in dft_tools:
-            if tool.name == tool_name:
-                tool_func = tool
-                break
+        tool_func = next((t for t in dft_tools if t.name == tool_name), None)
 
-        if tool_func:
-            try:
-                # Execute the tool with injected thread_id
-                result = tool_func.func(**tool_args)
-                tool_message = ToolMessage(
+        if not tool_func:
+            tool_messages.append(
+                ToolMessage(
+                    content=f"Tool {tool_name} not found",
+                    tool_call_id=tool_call["id"],
+                )
+            )
+            continue
+
+        try:
+            fn = tool_func.func
+            if inspect.iscoroutinefunction(fn):
+                result = await fn(**tool_args)  # type: ignore[arg-type]
+            else:
+                result = await asyncio.to_thread(fn, **tool_args)
+            tool_messages.append(
+                ToolMessage(
                     content=str(result),
                     tool_call_id=tool_call["id"],
                 )
-            except Exception as e:
-                tool_message = ToolMessage(
-                    content=f"Error executing {tool_name}: {str(e)}",
+            )
+        except Exception as e:
+            tool_messages.append(
+                ToolMessage(
+                    content=f"Error executing {tool_name}: {e}",
                     tool_call_id=tool_call["id"],
                 )
-        else:
-            tool_message = ToolMessage(
-                content=f"Tool {tool_name} not found",
-                tool_call_id=tool_call["id"],
             )
-
-        tool_messages.append(tool_message)
 
     return {"messages": tool_messages}
 
@@ -559,7 +435,5 @@ workflow.add_conditional_edges(
 # After tools, go back to DFT agent
 workflow.add_edge("tools", "dft_agent")
 
-# Compile the legacy DFT agent (for compatibility)
-legacy_dft_agent = workflow.compile(checkpointer=MemorySaver())
-
-# The main agent is handled in __init__.py to avoid circular imports
+# Compile the agent (no explicit checkpointer for in-memory dev use)
+dft_agent = workflow.compile()
