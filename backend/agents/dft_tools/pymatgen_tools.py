@@ -244,7 +244,7 @@ def find_pseudopotentials(
         dict with working_dir and found pseudopotentials (local paths)
     """
     try:
-        output_dir = Path(f"{settings.ROOT_PATH}/WORKSPACE/pseudopotentials")
+        output_dir = Path(f"{settings.ROOT_PATH}/WORKSPACE/pseudos")
         output_dir.mkdir(exist_ok=True)
 
         found_pps = {}

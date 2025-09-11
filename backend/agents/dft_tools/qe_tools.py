@@ -14,6 +14,7 @@ import numpy as np
 from ase.io import read, write
 from langchain_core.tools import tool
 
+from backend.settings import settings
 from backend.utils.workspace import get_subdir_path
 
 
@@ -156,14 +157,26 @@ def generate_qe_input(
                     # For transition metals and heavy elements
                     pseudopotentials[el] = f"{el}.pbe-spn-rrkjus_psl.1.0.0.UPF"
 
+        # Use workspace-specific directory if thread_id is available
+        output_dir = get_subdir_path(_thread_id, "calculations/qe_inputs")
+
+        # Generate filename
+        input_filename = f"{job_name}_{calculation}"
+        if occupations == "smearing":
+            input_filename += f"_{smearing}"
+        input_filename += f"_ecut{ecutwfc:.0f}.pwi"
+        input_filepath = output_dir / input_filename
+
+        pseudo_dir = f"{settings.ROOT_PATH}/WORKSPACE/pseudos"
+
         # QE input data dictionary
         input_data = {
             "control": {
                 "calculation": calculation,
                 "restart_mode": restart_mode,
                 "prefix": job_name,
-                "outdir": "./tmp",
-                "pseudo_dir": "./pseudos",
+                "outdir": output_dir / "tmp",
+                "pseudo_dir": pseudo_dir,
                 "verbosity": "high",
                 "disk_io": disk_io,
             },
@@ -208,16 +221,6 @@ def generate_qe_input(
             input_data["system"].pop("smearing", None)
             input_data["system"].pop("degauss", None)
 
-        # Use workspace-specific directory if thread_id is available
-        output_dir = get_subdir_path(_thread_id, "calculations/qe_inputs")
-
-        # Generate filename
-        input_filename = f"{job_name}_{calculation}"
-        if occupations == "smearing":
-            input_filename += f"_{smearing}"
-        input_filename += f"_ecut{ecutwfc:.0f}.pwi"
-        input_filepath = output_dir / input_filename
-
         # Write input file using ASE's espresso-in format
         write(
             str(input_filepath),
@@ -246,7 +249,7 @@ def generate_qe_input(
             "smearing": smearing,
             "degauss": degauss,
             "pseudopotentials": pseudopotentials,
-            "pseudo_dir": "./pseudos",
+            "pseudo_dir": pseudo_dir,
             "elements": elements,
             "nat": nat,
             "ntyp": ntyp,
