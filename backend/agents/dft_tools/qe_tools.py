@@ -349,9 +349,7 @@ def submit_local_job(
                     ["bash", str(job_script)],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    cwd=job_script.parent
-                    if input_path.suffix == ".sh"
-                    else input_path.parent,
+                    cwd=job_script.parent,
                 )
 
                 job_results[calc_type] = {
