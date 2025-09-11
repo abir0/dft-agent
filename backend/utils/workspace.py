@@ -4,6 +4,7 @@ Workspace Management Utilities for DFT Agent
 Handles creation and management of user-specific workspaces for DFT calculations.
 """
 
+import asyncio
 import hashlib
 import uuid
 from pathlib import Path
@@ -104,7 +105,7 @@ class WorkspaceManager:
         for subdir in standard_dirs:
             (workspace_path / subdir).mkdir(parents=True, exist_ok=True)
 
-    def get_subdir_path(self, thread_id: str, subdir: str) -> Path:
+    def get_subdir_path(self, thread_id: Optional[str], subdir: str) -> Path:
         """Get path to a specific subdirectory within a workspace.
 
         Args:
@@ -114,6 +115,8 @@ class WorkspaceManager:
         Returns:
             Path to the specified subdirectory
         """
+        if not thread_id:
+            thread_id = str(uuid.uuid4())
         workspace_path = self.get_workspace_path(thread_id)
         subdir_path = workspace_path / subdir
         subdir_path.mkdir(parents=True, exist_ok=True)
@@ -187,7 +190,7 @@ class WorkspaceManager:
 workspace_manager = WorkspaceManager()
 
 
-def get_workspace_path(thread_id: str) -> Path:
+def get_workspace_path(thread_id: Optional[str]) -> Path:
     """Convenience function to get workspace path for a thread.
 
     Args:
@@ -197,6 +200,15 @@ def get_workspace_path(thread_id: str) -> Path:
         Path to the thread-specific workspace
     """
     return workspace_manager.get_workspace_path(thread_id)
+
+
+async def async_get_workspace_path(thread_id: str) -> Path:
+    """Asynchronously obtain (and create) the workspace path for a thread.
+
+    Offloads the potentially blocking directory creation to a worker thread
+    to keep the event loop responsive under LangGraph dev's blocking detector.
+    """
+    return await asyncio.to_thread(workspace_manager.get_workspace_path, thread_id)
 
 
 def get_subdir_path(thread_id: str, subdir: str) -> Path:

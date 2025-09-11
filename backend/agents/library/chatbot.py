@@ -1,7 +1,10 @@
 import asyncio
+import re
 from datetime import datetime
 from pathlib import Path
 
+import requests
+from bs4 import BeautifulSoup
 from ddgs import DDGS
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
@@ -11,16 +14,13 @@ from langchain_core.runnables import (
     RunnableSerializable,
 )
 from langchain_core.tools import tool
-import re
-import requests
-from bs4 import BeautifulSoup
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
+from backend.agents.asta_mcp_client import get_specific_asta_tools
 from backend.agents.llm import get_model, settings
 from backend.agents.tools import calculator, python_repl
-from backend.agents.asta_mcp_client import get_specific_asta_tools
 
 
 class AgentState(MessagesState, total=False):
@@ -50,6 +50,7 @@ def web_search(query: str) -> str:
             return "\n".join(formatted_results)
     except Exception as e:
         return f"Error searching for '{query}': {str(e)}"
+
 
 # Initialize base tools
 @tool
@@ -84,7 +85,9 @@ def fetch_open_access_full_text(url: str, max_chars: int = 60000) -> str:
         content_type = resp.headers.get("Content-Type", "").lower()
 
         def _truncate(text: str) -> str:
-            return text if len(text) <= max_chars else text[:max_chars] + "\n...[truncated]"
+            return (
+                text if len(text) <= max_chars else text[:max_chars] + "\n...[truncated]"
+            )
 
         # Handle PDFs
         if "application/pdf" in content_type or url.lower().endswith(".pdf"):
@@ -113,18 +116,35 @@ def fetch_open_access_full_text(url: str, max_chars: int = 60000) -> str:
                 return f"Error extracting text from PDF: {e}"
 
         # Handle HTML, XML, and other text-like content
-        if any(t in content_type for t in [
-            "text/html",
-            "text/plain",
-            "application/xhtml+xml",
-            "application/xml",
-            "text/xml",
-        ]) or not content_type:
+        if (
+            any(
+                t in content_type
+                for t in [
+                    "text/html",
+                    "text/plain",
+                    "application/xhtml+xml",
+                    "application/xml",
+                    "text/xml",
+                ]
+            )
+            or not content_type
+        ):
             try:
                 html = resp.text
                 soup = BeautifulSoup(html, "html.parser")
                 # Remove non-content elements
-                for tag in soup(["script", "style", "noscript", "header", "footer", "form", "nav", "aside"]):
+                for tag in soup(
+                    [
+                        "script",
+                        "style",
+                        "noscript",
+                        "header",
+                        "footer",
+                        "form",
+                        "nav",
+                        "aside",
+                    ]
+                ):
                     tag.decompose()
 
                 # Heuristics to prioritize main article content
@@ -177,26 +197,27 @@ base_tools = [
 _all_tools = None
 _asta_tools_loaded = False
 
+
 async def get_all_tools():
     """Get all tools including Asta MCP tools with proper async handling."""
     global _all_tools, _asta_tools_loaded
-    
+
     if _all_tools is not None:
         return _all_tools
-    
+
     # Start with base tools
     _all_tools = base_tools.copy()
-    
+
     # Try to load Asta MCP tools
     if not _asta_tools_loaded:
         try:
             asta_tool_names = [
                 "search_papers_by_relevance",
-                "search_paper_by_title", 
+                "search_paper_by_title",
                 "get_papers",
                 "get_citations",
                 "search_authors_by_name",
-                "get_author_papers"
+                "get_author_papers",
             ]
             asta_tools = await get_specific_asta_tools(asta_tool_names)
             _all_tools.extend(asta_tools)
@@ -205,8 +226,9 @@ async def get_all_tools():
         except Exception as e:
             print(f"Warning: Could not load Asta MCP tools: {e}")
             _asta_tools_loaded = True  # Mark as attempted to avoid retrying
-    
+
     return _all_tools
+
 
 # For now, start with base tools only
 # Asta tools will be loaded lazily when the agent runs
@@ -299,11 +321,11 @@ async def create_chatbot_workflow():
     """Create the chatbot workflow with all tools loaded."""
     # Define the graph
     workflow = StateGraph(AgentState)
-    
+
     # Define nodes
     workflow.add_node("chatbot", acall_model)
     workflow.add_node("tools", await create_tool_node_with_fallback())
-    
+
     # Define edges
     workflow.set_entry_point("chatbot")
     workflow.add_conditional_edges(
@@ -311,34 +333,35 @@ async def create_chatbot_workflow():
         tools_condition,
     )
     workflow.add_edge("tools", "chatbot")
-    
+
     # Compile the graph
     return workflow.compile(checkpointer=MemorySaver())
+
 
 # Create a synchronous wrapper that initializes the workflow lazily
 class LazyWorkflow:
     def __init__(self):
         self._workflow = None
-    
+
     async def get_workflow(self):
         if self._workflow is None:
             self._workflow = await create_chatbot_workflow()
         return self._workflow
-    
+
     async def ainvoke(self, *args, **kwargs):
         workflow = await self.get_workflow()
         return await workflow.ainvoke(*args, **kwargs)
-    
+
     async def astream(self, *args, **kwargs):
         workflow = await self.get_workflow()
         async for event in workflow.astream(*args, **kwargs):
             yield event
-    
+
     async def astream_events(self, *args, **kwargs):
         workflow = await self.get_workflow()
         async for event in workflow.astream_events(*args, **kwargs):
             yield event
-    
+
     def __getattr__(self, name):
         # For any other methods, delegate to the workflow once it's created
         def method_wrapper(*args, **kwargs):
@@ -349,24 +372,10 @@ class LazyWorkflow:
                     return await method(*args, **kwargs)
                 else:
                     return method(*args, **kwargs)
+
             return async_method()
+
         return method_wrapper
 
-# Create a factory function that returns the compiled graph
-def chatbot():
-    """Factory function that returns the compiled chatbot graph."""
-    async def async_factory():
-        return await create_chatbot_workflow()
-    
-    # Handle different async contexts
-    try:
-        # Try to get the current event loop
-        loop = asyncio.get_running_loop()
-        # If we're in an async context, we need to use a different approach
-        import concurrent.futures
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit(asyncio.run, async_factory())
-            return future.result()
-    except RuntimeError:
-        # No event loop running, we can create our own
-        return asyncio.run(async_factory())
+# Create the lazy workflow instance
+chatbot = LazyWorkflow()

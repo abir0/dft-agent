@@ -20,6 +20,7 @@ dependencies = [
     "langchain-experimental",
     "langchain-huggingface",
     "langchain-groq",
+    "langchain-mcp-adapters",
     "langchain-ollama",
     "langchain-openai",
     "langgraph",
@@ -59,7 +60,8 @@ client = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
+exclude = ["dist", "build", "scripts", "data", "logs", "WORKSPACE", ".venv"]
 
 [tool.uv]
 dev-dependencies = [

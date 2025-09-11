@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 from langgraph.graph.state import CompiledStateGraph
-
 from backend.core import AgentInfo
 
 DEFAULT_AGENT = "dft_agent"
