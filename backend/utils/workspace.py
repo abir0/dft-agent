@@ -83,26 +83,14 @@ class WorkspaceManager:
         Args:
             workspace_path: Path to the workspace directory
         """
-        standard_dirs = [
-            "structures",
-            "structures/bulk",
-            "structures/supercells",
-            "structures/slabs",
-            "structures/with_adsorbates",
-            "calculations",
-            "calculations/qe_inputs",
-            "calculations/jobs",
-            "calculations/outputs",
-            "optimized",
-            "relaxed",
-            "kpaths",
-            "kpoints",
-            "convergence_tests",
-            "results",
-            "databases",
+        dirs = [
+            "structures",  # All structure files (bulk, slabs, supercells, etc.)
+            "calculations",  # All calculation inputs and outputs
+            "results",  # Final results and analysis
+            "databases",  # Local calculation databases
         ]
 
-        for subdir in standard_dirs:
+        for subdir in dirs:
             (workspace_path / subdir).mkdir(parents=True, exist_ok=True)
 
     def get_subdir_path(self, thread_id: Optional[str], subdir: str) -> Path:
@@ -110,7 +98,7 @@ class WorkspaceManager:
 
         Args:
             thread_id: Thread/chat identifier
-            subdir: Subdirectory name (e.g., 'structures/bulk', 'calculations')
+            subdir: Subdirectory path (e.g., 'structures', 'structures/bulk', 'calculations/qe_inputs')
 
         Returns:
             Path to the specified subdirectory
@@ -150,40 +138,6 @@ class WorkspaceManager:
             shutil.rmtree(workspace_path)
             return True
         return False
-
-    def get_workspace_info(self, thread_id: str) -> dict:
-        """Get information about a workspace.
-
-        Args:
-            thread_id: Thread/chat identifier
-
-        Returns:
-            Dictionary with workspace information
-        """
-        workspace_path = self.get_workspace_path(thread_id)
-
-        # Count files in different categories
-        structure_files = len(list(workspace_path.glob("structures/**/*.*")))
-        calculation_files = len(list(workspace_path.glob("calculations/**/*.*")))
-        result_files = len(list(workspace_path.glob("results/**/*.*")))
-
-        # Get workspace size
-        total_size = sum(
-            f.stat().st_size for f in workspace_path.rglob("*") if f.is_file()
-        )
-
-        return {
-            "thread_id": thread_id,
-            "workspace_path": str(workspace_path),
-            "structure_files": structure_files,
-            "calculation_files": calculation_files,
-            "result_files": result_files,
-            "total_size_bytes": total_size,
-            "total_size_mb": total_size / (1024 * 1024),
-            "created": workspace_path.stat().st_ctime
-            if workspace_path.exists()
-            else None,
-        }
 
 
 # Global workspace manager instance
