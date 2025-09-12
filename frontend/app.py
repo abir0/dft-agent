@@ -32,7 +32,10 @@ from backend.agents.client import AgentClient, AgentClientError
 from backend.core.schema import ChatHistory, ChatMessage
 
 # Title and icon for head
-APP_TITLE = "AI Agent Interface"
+APP_TITLE = "AI Assistant"
+CAPTION = (
+    "Multi-agent AI assistant for computational materials science and research."
+)
 SCRIPT_DIR = Path(__file__).parent
 APP_ICON = SCRIPT_DIR / "static" / "logo.svg"
 USER_ID_COOKIE = "user_id"
@@ -215,7 +218,7 @@ async def main() -> None:
             """,
             unsafe_allow_html=True,
         )
-        st.caption("LangGraph + FastAPI + Streamlit agent interface")
+        st.caption(CAPTION)
 
         # New Chat button
         if st.button(":material/chat: New Chat", use_container_width=True):

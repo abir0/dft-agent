@@ -1,6 +1,4 @@
-# CRYSTAL
-
-## Agentic AI Assistant for Computational Materials Science
+# Agentic AI Assistant for Computational Materials Science
 
 Streamlined DFT workflows • HPC automation • Extensible multi‑agent architecture
 
@@ -14,7 +12,7 @@ DFT Agent is a production‑oriented, tool‑rich autonomous assistant for Densi
 * A multi‑agent graph built with **LangGraph** (chat, domain DFT expert, SLURM scheduler)
 * A **FastAPI** backend with streaming, state checkpointing, and structured tool execution
 * A **Thread‑scoped workspace** system for deterministic artifact storage
-* A **Streamlit frontend** (project name: CRYSTAL) for interactive exploration
+* A **Streamlit frontend** for interactive exploration
 
 The system orchestrates structure generation, Quantum ESPRESSO (QE) input authoring, convergence studies, HPC job lifecycle management, and materials data retrieval—while remaining fully extensible via a clean tool registry pattern.
 
@@ -164,7 +162,7 @@ pseudos/
 
 Streaming: `GET /agent/stream?thread_id=<uuid>&agent=dft_agent&input=...` yields `token` and `message` events followed by `[DONE]`.
 
-## Frontend (CRYSTAL)
+## Frontend
 
 The Streamlit UI provides:
 
