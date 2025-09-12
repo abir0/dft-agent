@@ -13,6 +13,14 @@ pseudopotentials/
 **/analysis/
 **/formation_energies/
 
+# Structure files (temporary/generated)
+*.cif
+*_POSCAR
+POSCAR
+CONTCAR
+*.xyz
+*.pdb
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
