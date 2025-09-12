@@ -33,20 +33,52 @@ from backend.core.schema import ChatHistory, ChatMessage
 
 # Title and icon for head
 APP_TITLE = "AI Agent Interface"
-APP_ICON = "frontend/static/logo.svg"
+
+# Get the directory where this script is located
+SCRIPT_DIR = Path(__file__).parent
+APP_ICON = SCRIPT_DIR / "static" / "logo.svg"
 
 
 # Utility functions
-def img_to_bytes(img_path: str) -> bytes:
-    with open(img_path, "rb") as img_file:
-        return base64.b64encode(img_file.read()).decode()
+def img_to_bytes(img_path: str | Path) -> str:
+    """Convert image file to base64 string, with fallback for missing files."""
+    try:
+        img_path = Path(img_path)
+        if not img_path.exists():
+            # Return a simple placeholder SVG if file doesn't exist
+            placeholder_svg = """<svg width="40" height="40" xmlns="http://www.w3.org/2000/svg">
+                <rect width="40" height="40" fill="#f0f0f0" stroke="#ccc" stroke-width="1"/>
+                <text x="20" y="25" text-anchor="middle" font-family="Arial" font-size="12" fill="#666">AI</text>
+            </svg>"""
+            return base64.b64encode(placeholder_svg.encode()).decode()
+        
+        with open(img_path, "rb") as img_file:
+            return base64.b64encode(img_file.read()).decode()
+    except Exception as e:
+        # Log the error but don't crash the app
+        print(f"Warning: Could not load image {img_path}: {e}")
+        # Return a simple placeholder
+        placeholder_svg = """<svg width="40" height="40" xmlns="http://www.w3.org/2000/svg">
+            <rect width="40" height="40" fill="#f0f0f0" stroke="#ccc" stroke-width="1"/>
+            <text x="20" y="25" text-anchor="middle" font-family="Arial" font-size="12" fill="#666">AI</text>
+        </svg>"""
+        return base64.b64encode(placeholder_svg.encode()).decode()
 
 
-def img_to_html(img_path: str) -> str:
-    img_html = "<img src='data:image/png;base64,{}' class='img-fluid'>".format(
-        img_to_bytes(img_path)
-    )
-    return img_html
+def img_to_html(img_path: str | Path) -> str:
+    """Convert image file to HTML img tag with base64 data."""
+    try:
+        img_path = Path(img_path)
+        if not img_path.exists():
+            return "<div style='width:40px;height:40px;background:#f0f0f0;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:12px;color:#666;'>AI</div>"
+        
+        img_html = "<img src='data:image/png;base64,{}' class='img-fluid'>".format(
+            img_to_bytes(img_path)
+        )
+        return img_html
+    except Exception as e:
+        print(f"Warning: Could not create HTML for image {img_path}: {e}")
+        return "<div style='width:40px;height:40px;background:#f0f0f0;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:12px;color:#666;'>AI</div>"
 
 
 def replace_img_tag(html_content: str) -> str:
@@ -67,9 +99,12 @@ def replace_img_tag(html_content: str) -> str:
 
 
 async def main() -> None:
+    # Set page icon only if it exists
+    page_icon = APP_ICON if APP_ICON.exists() else None
+    
     st.set_page_config(
         page_title=APP_TITLE,
-        page_icon=APP_ICON,
+        page_icon=page_icon,
         menu_items={},
     )
 
@@ -97,7 +132,7 @@ async def main() -> None:
         agent_url = os.getenv("AGENT_URL")
         if not agent_url:
             host = os.getenv("HOST", "0.0.0.0")
-            port = os.getenv("PORT", 8080)
+            port = os.getenv("PORT", 8083)
             agent_url = f"http://{host}:{port}"
         try:
             with st.spinner("Connecting to agent service..."):
@@ -143,9 +178,12 @@ async def main() -> None:
             """
         )
         with st.popover(":material/settings: Settings", use_container_width=True):
-            model_idx = agent_client.info.models.index(agent_client.info.default_model)
+            # Convert models to strings for display
+            model_options = [str(m) for m in agent_client.info.models]
+            default_model_str = str(agent_client.info.default_model)
+            model_idx = model_options.index(default_model_str) if default_model_str in model_options else 0
             model = st.selectbox(
-                "LLM to use", options=agent_client.info.models, index=model_idx
+                "LLM to use", options=model_options, index=model_idx
             )
             agent_list = [a.key for a in agent_client.info.agents]
             agent_idx = agent_list.index(agent_client.info.default_agent)
@@ -280,7 +318,11 @@ async def draw_messages(
             st.error(f"Unexpected message type: {type(msg)}")
             st.write(msg)
             st.stop()
-        match msg.type:
+        
+        # Normalize message type to handle any case sensitivity issues
+        msg_type = msg.type.strip().lower() if isinstance(msg.type, str) else str(msg.type).strip().lower()
+        
+        match msg_type:
             # Messages from the user
             case "human":
                 last_message_type = "human"
@@ -323,10 +365,20 @@ async def draw_messages(
 
                         # Expect one ToolMessage for each tool call
                         for _ in range(len(call_results)):
-                            tool_result: ChatMessage = await anext(messages_agen)
-                            if tool_result.type != "tool":
+                            try:
+                                tool_result = await anext(messages_agen)
+                            except StopAsyncIteration:
+                                st.warning("Expected tool result but stream ended early")
+                                break
+                            
+                            # Handle both ChatMessage objects and string tokens
+                            if isinstance(tool_result, str):
+                                # Skip string tokens during tool result processing
+                                continue
+                            
+                            if not hasattr(tool_result, 'type') or tool_result.type != "tool":
                                 st.error(
-                                    f"Unexpected ChatMessage type: {tool_result.type}"
+                                    f"Unexpected ChatMessage type: {getattr(tool_result, 'type', 'unknown')}"
                                 )
                                 st.write(tool_result)
                                 st.stop()
@@ -338,9 +390,28 @@ async def draw_messages(
                             status.write(tool_result.content)
                             status.update(state="complete")
 
+            # Handle tool messages that might come through the main loop
+            case "tool":
+                if is_new:
+                    st.session_state.messages.append(msg)
+                
+                # Display tool results in the current AI message container
+                if st.session_state.last_message:
+                    with st.session_state.last_message:
+                        st.write(f"**Tool Result:** {msg.content}")
+                else:
+                    # If no AI message container exists, create one
+                    last_message_type = "ai"
+                    st.session_state.last_message = st.chat_message("ai")
+                    with st.session_state.last_message:
+                        st.write(f"**Tool Result:** {msg.content}")
+
             # For unexpected message types, log an error and stop
             case _:
-                st.error(f"Unexpected ChatMessage type: {msg.type}")
+                if hasattr(msg, 'type'):
+                    st.error(f"Unexpected ChatMessage type: {msg.type}")
+                else:
+                    st.error(f"Unexpected message format: {type(msg)}")
                 st.write(msg)
                 st.stop()
 

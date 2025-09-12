@@ -28,6 +28,7 @@ from .pymatgen_tools import (
     analyze_crystal_structure,
     calculate_formation_energy,
     find_pseudopotentials,
+    get_pseudopotential_recommendations,
     search_materials_project,
 )
 from .qe_tools import (
@@ -44,6 +45,15 @@ from .structure_tools import (
     generate_bulk,
     generate_slab,
 )
+from .tool_registry import (
+    TOOL_REGISTRY,
+    TOOL_CATEGORIES,
+    get_tool_by_name,
+    get_tools_by_category,
+    list_all_tools,
+    list_categories,
+    get_tool_info,
+)
 
 __all__ = [  # noqa: RUF022
     # Structure tools
@@ -56,6 +66,7 @@ __all__ = [  # noqa: RUF022
     "search_materials_project",
     "analyze_crystal_structure",
     "find_pseudopotentials",
+    "get_pseudopotential_recommendations",
     "calculate_formation_energy",
     # QE tools
     "generate_qe_input",
@@ -76,4 +87,12 @@ __all__ = [  # noqa: RUF022
     "query_calculations",
     "export_results",
     "search_similar_calculations",
+    # Tool registry
+    "TOOL_REGISTRY",
+    "TOOL_CATEGORIES",
+    "get_tool_by_name",
+    "get_tools_by_category",
+    "list_all_tools",
+    "list_categories",
+    "get_tool_info",
 ]
