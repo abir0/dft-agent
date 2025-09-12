@@ -29,6 +29,9 @@ check_port() {
     fi
 }
 
+# Create logs directory if it doesn't exist
+mkdir -p logs
+
 if check_port 8083; then
     echo "backend already running (8083)"
 else
@@ -40,7 +43,7 @@ fi
 if check_port 8501; then
     echo "frontend already running (8501)"
 else
-    nohup streamlit run frontend/app.py > logs/service.log 2>&1 &
+    nohup streamlit run frontend/app.py > logs/app.log 2>&1 &
     echo $! > .frontend.pid
     echo "frontend started pid $(cat .frontend.pid)"
 fi
