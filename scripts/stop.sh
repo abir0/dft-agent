@@ -16,22 +16,8 @@ kill_pid_file() {
     rm -f "$f"
 }
 
-stop_port() {
-    local port="$1"; local label="$2"
-    if ss -tulpn 2>/dev/null | grep -q ":$port"; then
-        echo "stopping $label (port $port)"
-        fuser -k "$port"/tcp 2>/dev/null || true
-        pkill -f "$port" 2>/dev/null || true
-    else
-        echo "$label not running"
-    fi
-}
-
 kill_pid_file .backend.pid
 kill_pid_file .frontend.pid
-
-stop_port 8083 backend
-stop_port 8501 frontend
 
 pkill -f 'uvicorn backend.api.main:app' 2>/dev/null || true
 pkill -f 'streamlit run app.py' 2>/dev/null || true

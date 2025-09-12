@@ -25,7 +25,7 @@ fi
 if frontend_running; then
     echo "frontend already running (8501)"
 else
-    nohup streamlit run frontend/app.py > logs/service.log 2>&1 &
+    nohup streamlit run frontend/app.py > logs/app.log 2>&1 &
     echo $! > .frontend.pid
     echo "frontend started pid $(cat .frontend.pid)"
 fi
