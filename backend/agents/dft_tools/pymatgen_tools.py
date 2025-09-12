@@ -29,9 +29,14 @@ headers = {
 }
 
 
-# Load parsed pseudopotential data
-with open("data/pseudos_metadata.json", "r", encoding="utf-8") as f:
-    PP_METADATA = json.load(f)
+# Lazy loading of pseudopotential metadata
+def _load_pp_metadata():
+    """Load pseudopotential metadata, returning empty list if file not found."""
+    try:
+        with open("data/pseudos_metadata.json", "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
 
 
 @tool
@@ -292,10 +297,13 @@ def find_pseudopotentials(
         found_pps = {}
         missing_pps = []
 
+        # Load pseudopotential metadata
+        pp_metadata = _load_pp_metadata()
+
         for elem in elements:
             # Search parsed JSON
             match = None
-            for entry in PP_METADATA:
+            for entry in pp_metadata:
                 if (
                     entry.get("element", "").capitalize() == elem.capitalize()
                     and entry.get("pp_type", "").lower() == pp_type.lower()
