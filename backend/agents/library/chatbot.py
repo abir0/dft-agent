@@ -16,7 +16,13 @@ from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
 from backend.agents.llm import get_model, settings
-from backend.agents.tools import calculator, python_repl
+from backend.agents.tools import (
+    calculator, 
+    python_repl,
+    load_local_adsorption_data,
+    search_adsorption_data,
+    list_available_datasets
+)
 from backend.agents.asta_mcp_client import get_specific_asta_tools
 
 
@@ -49,7 +55,14 @@ def web_search(query: str) -> str:
         return f"Error searching for '{query}': {str(e)}"
 
 # Initialize base tools
-base_tools = [web_search, calculator, python_repl]
+base_tools = [
+    web_search, 
+    calculator, 
+    python_repl,
+    load_local_adsorption_data,
+    search_adsorption_data,
+    list_available_datasets
+]
 
 # Global variable to cache loaded tools
 _all_tools = None
@@ -97,36 +110,20 @@ Path(images_dir).mkdir(parents=True, exist_ok=True)
 datasets_dir = f"{settings.ROOT_PATH}/data/raw_data"
 
 instructions = f"""
-    You are a helpful chat assistant with expertise in materials science and DFT calculations,
-    with the ability to search the web, search scientific literature, and use other tools.
+    You are a helpful chat assistant with expertise in materials science and DFT calculations.
     Today's date is {current_date}.
 
     NOTE: THE USER CAN'T SEE THE TOOL RESPONSE.
 
-    A few things to remember:
-    - When searching, be persistent. Expand your query bounds if the first search returns no results.
-    - If a search comes up empty, expand your search before giving up.
-    - Use the search_papers_by_relevance tool to find peer-reviewed scientific literature by keyword.
-    - Use the search_paper_by_title tool to find specific papers by their title.
-    - Use the get_papers tool to get detailed information about specific papers using their ID.
-    - Use the get_citations tool to find papers that cite a specific paper.
-    - Use the search_authors_by_name and get_author_papers tools to find papers by specific researchers.
-    - If Asta scientific paper search tools return 403 Forbidden errors, inform the user that there may be an API key permission issue and suggest using web search instead.
-    - Please include markdown-formatted links to any citations used in your response. Only include one
-    or two citations per response unless more are needed. ONLY USE LINKS RETURNED BY THE TOOLS.
-    - Use calculator tool with numexpr to answer math questions. The user does not understand numexpr,
-      so for the final response, use human readable format or markdown format.
-    - Use Python REPL tool for data analysis and visualization tasks.
-    - If Python REPL shows error fix the error in code and run again, if you are failing more than 3 times give up.
-    - For data processing and analysis, use pandas library.
-    - Local datasets are available at: {datasets_dir}
-    - Load datasets with absolute paths via pandas, e.g., `import pandas as pd; from pathlib import Path; df = pd.read_csv(Path("{datasets_dir}") / "file.csv")`. Prefer read-only access; do not move or rename source files.
-    - For charts generation, use seaborn or matplotlib.
-    - ALWAYS save the plots/charts into the following folder: {images_dir}
-    - Only include markdown-formatted links to citations used in your response. Only include one
-    or two citations per response unless more are needed. ONLY USE LINKS RETURNED BY THE TOOLS.
-    - When displaying image to the user, use html <img> tag, instead of markdown.
-    ALWAYS USE IMG TAG FOR LINKING IMAGES.
+    CRITICAL RULES:
+    - For adsorption data queries: ALWAYS use local dataset tools FIRST (load_local_adsorption_data, search_adsorption_data, list_available_datasets)
+    - NEVER fabricate numerical data - only use real data from tools
+    - Local datasets at: {datasets_dir} (CPD_H, OC2020_H, jp4c06194_SI)
+    - Use search_adsorption_data for specific queries (e.g., H on Pt)
+    - Only search web if local data unavailable
+    - Save plots to: {images_dir}
+    - Use Python REPL for analysis, pandas for data processing
+    - Include citations from tool responses only
     """
 
 
