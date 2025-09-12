@@ -1,16 +1,33 @@
 #!/bin/bash
+# Minimal run script: starts backend (8083) and frontend (8501).
+set -e
 
-# Activate the virtual environment
+if [ ! -d .venv ]; then
+    echo ".venv not found. Run scripts/install.sh" >&2
+    exit 1
+fi
+
+# shellcheck disable=SC1091
 source .venv/bin/activate
+export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 
-# Add project src to python path
-export PYTHONPATH="$(pwd):$PYTHONPATH"
+backend_running() { ss -tulpn 2>/dev/null | grep -q ':8083'; }
+frontend_running() { ss -tulpn 2>/dev/null | grep -q ':8501'; }
 
-# Create logs dir
-mkdir -p logs
+if backend_running; then
+    echo "backend already running (8083)"
+else
+    nohup uvicorn backend.api.main:app --host 0.0.0.0 --port 8083 --reload > logs/service.log 2>&1 &
+    echo $! > .backend.pid
+    echo "backend started pid $(cat .backend.pid)"
+fi
 
-# Run the API service
-nohup python backend/run_service.py > logs/service.log 2>&1 &
+if frontend_running; then
+    echo "frontend already running (8501)"
+else
+    nohup streamlit run frontend/app.py > logs/service.log 2>&1 &
+    echo $! > .frontend.pid
+    echo "frontend started pid $(cat .frontend.pid)"
+fi
 
-# Run the Streamlit app
-nohup streamlit run frontend/app.py > logs/app.log 2>&1 &
+echo "services running: api http://localhost:8083  ui http://localhost:8501"

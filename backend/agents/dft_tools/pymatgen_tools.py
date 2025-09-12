@@ -10,13 +10,14 @@ import json
 import shutil
 import tarfile
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 
 import requests
 from ase.io import read
 from langchain_core.tools import tool
 from mp_api.client import MPRester
 from pymatgen.analysis.local_env import CrystalNN
+from pymatgen.core import Structure
 from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
@@ -29,14 +30,34 @@ headers = {
 }
 
 
-# Lazy loading of pseudopotential metadata
-def _load_pp_metadata():
-    """Load pseudopotential metadata, returning empty list if file not found."""
-    try:
-        with open("data/pseudos_metadata.json", "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return []
+# Load parsed pseudopotential data
+def load_pseudopotential_metadata():
+    """Load pseudopotential metadata from JSON file."""
+    # Try multiple possible locations for the database file
+    possible_paths = [
+        "data/pseudos_metadata.json",
+        Path(__file__).parent.parent.parent.parent / "data" / "pseudos_metadata.json",
+        Path.cwd() / "data" / "pseudos_metadata.json",
+    ]
+
+    for path in possible_paths:
+        if Path(path).exists():
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    # Silently load pseudopotential database
+                    return data
+            except Exception as e:
+                print(
+                    f"Warning: Could not load pseudopotential database from {path}: {e}"
+                )
+                continue
+
+    # Return empty metadata if file not found - let the system handle missing elements dynamically
+    return {}
+
+
+PP_METADATA = load_pseudopotential_metadata()
 
 
 @tool
@@ -44,7 +65,6 @@ def search_materials_project(
     formula: str,
     properties: Optional[List[str]] = None,
     limit: int = 10,
-    api_key: Optional[str] = None,
 ) -> str:
     """Search Materials Project database for materials.
 
@@ -52,12 +72,17 @@ def search_materials_project(
         formula: Chemical formula (e.g., 'LiFePO4', 'TiO2', 'Cu')
         properties: List of properties to retrieve
         limit: Maximum number of results
-        api_key: Materials Project API key
 
     Returns:
         Search results with material properties
     """
     try:
+        # Use API key from settings if not provided
+        if settings.MP_API_KEY:
+            api_key = settings.MP_API_KEY.get_secret_value()
+        else:
+            return "Error: Materials Project API key not configured. Please set MP_API_KEY in environment variables."
+
         if properties is None:
             properties = [
                 "material_id",
@@ -68,45 +93,11 @@ def search_materials_project(
                 "density",
             ]
 
-        # Map common alias fields to MP Summary API fields
-        alias_map = {
-            # formula
-            "pretty_formula": "formula_pretty",
-            # energy above hull
-            "e_above_hull": "energy_above_hull",
-            "eAboveHull": "energy_above_hull",
-            # symmetry-related
-            "spacegroup": "symmetry",
-            "space_group": "symmetry",
-            "spacegroup_symbol": "symmetry",
-            "spacegroup_number": "symmetry",
-            "crystal_system": "symmetry",
-        }
-
-        normalized_fields: Set[str] = set()
-        requested = set(properties)
-        needs_symmetry = any(
-            f in requested
-            for f in (
-                "spacegroup",
-                "space_group",
-                "spacegroup_symbol",
-                "spacegroup_number",
-                "crystal_system",
-            )
-        )
-
-        for f in properties:
-            normalized_fields.add(alias_map.get(f, f))
-
-        # Ensure symmetry fetched if any symmetry alias requested
-        if needs_symmetry:
-            normalized_fields.add("symmetry")
-
         with MPRester(api_key=api_key) as mpr:
-            docs = mpr.materials.summary.search(
-                formula=formula, fields=sorted(normalized_fields)
-            )[:limit]
+            # Search without fields parameter (API doesn't support it anymore)
+            docs = mpr.materials.summary.search(formula=formula)
+            # Limit results after getting them
+            docs = docs[:limit]
 
         if not docs:
             return f"No materials found for formula: {formula}"
@@ -117,40 +108,66 @@ def search_materials_project(
 
         results = []
         for i, doc in enumerate(docs):
+            # Handle both dict and object responses
+            if isinstance(doc, dict):
+                material_id = doc.get("material_id", f"unknown_{i}")
+                formula = doc.get("formula_pretty", "unknown")
+                formation_energy = doc.get("formation_energy_per_atom")
+                band_gap = doc.get("band_gap")
+                density = doc.get("density")
+                symmetry = doc.get("symmetry")
+                structure = doc.get("structure")
+            else:
+                material_id = getattr(doc, "material_id", f"unknown_{i}")
+                formula = getattr(doc, "formula_pretty", "unknown")
+                formation_energy = getattr(doc, "formation_energy_per_atom", None)
+                band_gap = getattr(doc, "band_gap", None)
+                density = getattr(doc, "density", None)
+                symmetry = getattr(doc, "symmetry", None)
+                structure = getattr(doc, "structure", None)
+
             result = {
-                "material_id": doc.material_id,
-                "formula": doc.formula_pretty,
+                "material_id": material_id,
+                "formula": formula,
             }
 
             # Add available properties
-            if (
-                hasattr(doc, "formation_energy_per_atom")
-                and doc.formation_energy_per_atom is not None
-            ):
-                result["formation_energy_per_atom"] = float(doc.formation_energy_per_atom)
+            if formation_energy is not None:
+                result["formation_energy_per_atom"] = float(formation_energy)
 
-            if hasattr(doc, "band_gap") and doc.band_gap is not None:
-                result["band_gap"] = float(doc.band_gap)
+            if band_gap is not None:
+                result["band_gap"] = float(band_gap)
 
-            if hasattr(doc, "density") and doc.density is not None:
-                result["density"] = float(doc.density)
+            if density is not None:
+                result["density"] = float(density)
 
-            if hasattr(doc, "symmetry"):
-                result["spacegroup"] = doc.symmetry.symbol
-                result["spacegroup_number"] = doc.symmetry.number
+            if symmetry:
+                if isinstance(symmetry, dict):
+                    result["spacegroup"] = symmetry.get("symbol", "unknown")
+                    result["spacegroup_number"] = symmetry.get("number", "unknown")
+                else:
+                    result["spacegroup"] = getattr(symmetry, "symbol", "unknown")
+                    result["spacegroup_number"] = getattr(symmetry, "number", "unknown")
 
             # Save structure if available
-            if hasattr(doc, "structure") and doc.structure is not None:
-                structure_file = (
-                    output_dir / f"{doc.material_id}_{doc.formula_pretty}.cif"
-                )
-                doc.structure.to(filename=str(structure_file))
-                result["structure_file"] = str(structure_file)
+            if structure is not None:
+                try:
+                    structure_file = output_dir / f"{material_id}_{formula}.cif"
+                    if hasattr(structure, "to"):
+                        # It's a Structure object
+                        structure.to(filename=str(structure_file))
+                    else:
+                        struct_obj = Structure.from_dict(structure)
+                        struct_obj.to(filename=str(structure_file))
+                    result["structure_file"] = str(structure_file)
+                except Exception as e:
+                    result["structure_error"] = str(e)
 
             results.append(result)
 
         # Save search results
-        results_file = output_dir / f"search_{formula.replace(' ', '_')}_results.json"
+        safe_formula = formula.replace(" ", "_") if formula else "unknown"
+        results_file = output_dir / f"search_{safe_formula}_results.json"
         with open(results_file, "w") as f:
             json.dump(results, f, indent=2, default=str)
 
@@ -278,17 +295,21 @@ def find_pseudopotentials(
     pp_type: str = "PAW",
     pp_library: str = "pslibrary",
     functional: str = "PBE",
+    quality: str = "high",
+    relativistic: Optional[bool] = None,
 ) -> dict:
-    """Find, download, and extract pseudopotentials from parsed JSON.
+    """Find, download, and extract pseudopotentials from PP metadata.
 
     Args:
         elements: List of chemical elements (symbols, e.g. ["Si", "O"])
         pp_type: Pseudopotential type ("PAW", "US", "ONCV")
         pp_library: Pseudopotential library ("pslibrary", "gbrv", "sg15", "dojo", "SSSP_Efficiency")
-        functional: Exchange-correlation functional ("PBE", "LDA", "PBEsol", "PW91")
+        functional: Exchange-correlation functional ("PBE", "PBEsol", "PZ")
+        quality: Quality level ("high", "medium", "low")
+        relativistic: Whether to use relativistic pseudopotentials (auto-detect for heavy elements if None)
 
     Returns:
-        dict with working_dir and found pseudopotentials (local paths)
+        dict with working_dir, found pseudopotentials (local paths), and parameters
     """
     try:
         output_dir = Path(f"{settings.ROOT_PATH}/WORKSPACE/pseudos")
@@ -298,7 +319,7 @@ def find_pseudopotentials(
         missing_pps = []
 
         # Load pseudopotential metadata
-        pp_metadata = _load_pp_metadata()
+        pp_metadata = load_pseudopotential_metadata()
 
         for elem in elements:
             # Search parsed JSON
