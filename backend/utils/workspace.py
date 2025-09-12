@@ -6,7 +6,6 @@ Handles creation and management of user-specific workspaces for DFT calculations
 
 import asyncio
 import shutil
-import uuid
 from pathlib import Path
 from typing import Optional
 
