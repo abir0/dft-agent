@@ -1,6 +1,7 @@
 from functools import cache
 from typing import TypeAlias
 
+from langchain_cerebras import ChatCerebras
 from langchain_community.chat_models import FakeListChatModel
 from langchain_groq import ChatGroq
 from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
@@ -9,6 +10,7 @@ from langchain_openai import AzureChatOpenAI, ChatOpenAI
 
 from backend.core import (
     AllModelEnum,
+    CerebrasModelName,
     FakeModelName,
     GroqModelName,
     HuggingFaceModelName,
@@ -23,6 +25,11 @@ _MODEL_TABLE = {
     OpenAIModelName.GPT_4O_MINI: "gpt-4o-mini",
     OpenAIModelName.GPT_5: "gpt-5",
     OpenAIModelName.GPT_5_MINI: "gpt-5-mini",
+    CerebrasModelName.GPT_OSS_120B: "gpt-oss-120b",
+    CerebrasModelName.QWEN_235B_INSTRUCT: "qwen-3-235b-a22b-instruct-2507",
+    CerebrasModelName.QWEN_235B_THINKING: "qwen-3-235b-a22b-thinking-2507",
+    CerebrasModelName.LLAMA_4_MAVERICK: "llama-4-maverick-17b-128e-instruct",
+    CerebrasModelName.LLAMA_33_70B: "llama-3.3-70b",
     OllamaModelName.OLLAMA_GENERIC: "ollama",
     GroqModelName.LLAMA_31_8B: "llama-3.1-8b-instant",
     GroqModelName.LLAMA_33_70B: "llama-3.3-70b-versatile",
@@ -31,7 +38,9 @@ _MODEL_TABLE = {
     HuggingFaceModelName.DEEPSEEK_V3: "deepseek-ai/DeepSeek-V3",
 }
 
-ModelT: TypeAlias = ChatOpenAI | AzureChatOpenAI | ChatGroq | ChatOllama | ChatHuggingFace
+ModelT: TypeAlias = (
+    ChatOpenAI | AzureChatOpenAI | ChatGroq | ChatOllama | ChatHuggingFace | ChatCerebras
+)
 
 
 @cache
@@ -55,6 +64,15 @@ def get_model(model_name: AllModelEnum, /) -> ModelT:
             streaming=True,
             api_key=settings.OPENAI_API_KEY.get_secret_value()
             if settings.OPENAI_API_KEY
+            else None,
+        )
+    if model_name in CerebrasModelName:
+        return ChatCerebras(
+            model=api_model_name,
+            temperature=0.3,
+            streaming=True,
+            api_key=settings.CEREBRAS_API_KEY.get_secret_value()
+            if settings.CEREBRAS_API_KEY
             else None,
         )
     if model_name in GroqModelName:

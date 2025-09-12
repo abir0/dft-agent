@@ -1,5 +1,6 @@
 from backend.core.models import (
     AllModelEnum,
+    CerebrasModelName,
     FakeModelName,
     GroqModelName,
     HuggingFaceModelName,
@@ -24,6 +25,7 @@ from backend.core.schema import (
 __all__ = [
     "AgentInfo",
     "AllModelEnum",
+    "CerebrasModelName",
     "ChatHistory",
     "ChatHistoryInput",
     "ChatMessage",

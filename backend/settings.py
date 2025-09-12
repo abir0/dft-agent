@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from backend.core import (
     AllModelEnum,
+    CerebrasModelName,
     FakeModelName,
     GroqModelName,
     HuggingFaceModelName,
@@ -41,6 +42,7 @@ class Settings(BaseSettings):
     AUTH_SECRET: SecretStr | None = None
 
     OPENAI_API_KEY: SecretStr | None = None
+    CEREBRAS_API_KEY: SecretStr | None = None
     GROQ_API_KEY: SecretStr | None = None
     HF_API_KEY: SecretStr | None = None
     OLLAMA_MODEL: str | None = None
@@ -60,6 +62,7 @@ class Settings(BaseSettings):
     def model_post_init(self, __context: Any) -> None:
         api_keys = {
             Provider.OPENAI: self.OPENAI_API_KEY,
+            Provider.CEREBRAS: self.CEREBRAS_API_KEY,
             Provider.GROQ: self.GROQ_API_KEY,
             Provider.HUGGINGFACE: self.HF_API_KEY,
             Provider.OLLAMA: self.OLLAMA_MODEL,
@@ -75,6 +78,10 @@ class Settings(BaseSettings):
                     if self.DEFAULT_MODEL is None:
                         self.DEFAULT_MODEL = OpenAIModelName.GPT_5
                     self.AVAILABLE_MODELS.update(set(OpenAIModelName))
+                case Provider.CEREBRAS:
+                    if self.DEFAULT_MODEL is None:
+                        self.DEFAULT_MODEL = CerebrasModelName.LLAMA_33_70B
+                    self.AVAILABLE_MODELS.update(set(CerebrasModelName))
                 case Provider.GROQ:
                     if self.DEFAULT_MODEL is None:
                         self.DEFAULT_MODEL = GroqModelName.LLAMA_31_8B
