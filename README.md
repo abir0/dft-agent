@@ -114,4 +114,39 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
+### 🔐 Environment Variables (Summary)
+
+| Variable | Purpose |
+|----------|---------|
+| OPENAI_API_KEY | Enable OpenAI models |
+| GROQ_API_KEY | Enable Groq Llama models |
+| HF_API_KEY | Enable HuggingFace endpoint models |
+| OLLAMA_MODEL / OLLAMA_BASE_URL | Local Ollama model config |
+| AUTH_SECRET | Optional bearer token for API protection |
+| MP_API_KEY | Materials Project queries |
+| ASTA_KEY | Scholarly (Asta MCP) tools |
+| DEFAULT_MODEL | Override initial default model |
+| MODE=dev | Enables auto-reload & dev behaviors |
+
+At least one model provider key (or USE_FAKE_MODEL=true) must be set; otherwise initialization will fail.
+
+### 🗂 Workspace Layout
+
+Per-thread directories under `WORKSPACE/<thread_id>/` with standardized subfolders:
+
+```text
+calculations/  convergence_tests/  databases/  kpaths/  kpoints/  optimized/  relaxed/  results/  structures/
+```
+
+Tools automatically place generated artifacts in the correct subfolder (e.g. QE inputs under `calculations/`). Return payloads are concise; large artifacts are written to disk for persistence.
+
+### 🛡 Safety Notes
+
+- The `python_repl` tool executes arbitrary code – restrict or disable in production deployments.
+- All file operations are scoped to the workspace root; avoid passing untrusted absolute paths.
+
+### ❓ Support
+
+Open an issue or discussion for feature requests, bug reports, or extension ideas.
+
 **Happy computing! 🧪⚛️**

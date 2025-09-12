@@ -15,6 +15,7 @@ dependencies = [
     "google-auth-oauthlib",
     "httpx",
     "langchain-anthropic",
+    "langchain-cerebras",
     "langchain-community",
     "langchain-core",
     "langchain-experimental",
