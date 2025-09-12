@@ -21,43 +21,62 @@ import base64
 import os
 import re
 import urllib.parse
+import uuid
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
 import streamlit as st
 from dotenv import load_dotenv
-from streamlit.runtime.scriptrunner import get_script_run_ctx
-import copy
-from plan_helpers import validate_plan_schema, diff_plans
-from agents.client import AgentClient, AgentClientError
+from backend.agents.client import AgentClient, AgentClientError
 from backend.core.schema import ChatHistory, ChatMessage
-import json
-import requests
 
 # Title and icon for head
 APP_TITLE = "AI Agent Interface"
-APP_DIR = Path(__file__).parent
-APP_ICON =APP_DIR/"static"/"logo.svg"
+SCRIPT_DIR = Path(__file__).parent
+APP_ICON = SCRIPT_DIR / "static" / "logo.svg"
+USER_ID_COOKIE = "user_id"
 
-def fetch_plan(base_url: str, req: str, hints: dict | None = None, code: dict | None = None,history: list | None = None) -> dict:
-    """Call the backend planner and return {request, plan, workroot}."""
-    url = f"{base_url.rstrip('/')}/dft-planner/plan"
-    payload = {"request": req, "hints": hints or {}, "code": code or {}, "history": history or []}
-    r = requests.post(url, json=payload, timeout=120)
-    r.raise_for_status()
-    return r.json()
 
 # Utility functions
-def img_to_bytes(img_path: str) -> bytes:
-    with open(img_path, "rb") as img_file:
-        return base64.b64encode(img_file.read()).decode()
+def img_to_bytes(img_path: str | Path) -> str:
+    """Convert image file to base64 string, with fallback for missing files."""
+    try:
+        img_path = Path(img_path)
+        if not img_path.exists():
+            # Return a simple placeholder SVG if file doesn't exist
+            placeholder_svg = """<svg width="40" height="40" xmlns="http://www.w3.org/2000/svg">
+                <rect width="40" height="40" fill="#f0f0f0" stroke="#ccc" stroke-width="1"/>
+                <text x="20" y="25" text-anchor="middle" font-family="Arial" font-size="12" fill="#666">AI</text>
+            </svg>"""
+            return base64.b64encode(placeholder_svg.encode()).decode()
+
+        with open(img_path, "rb") as img_file:
+            return base64.b64encode(img_file.read()).decode()
+    except Exception as e:
+        # Log the error but don't crash the app
+        print(f"Warning: Could not load image {img_path}: {e}")
+        # Return a simple placeholder
+        placeholder_svg = """<svg width="40" height="40" xmlns="http://www.w3.org/2000/svg">
+            <rect width="40" height="40" fill="#f0f0f0" stroke="#ccc" stroke-width="1"/>
+            <text x="20" y="25" text-anchor="middle" font-family="Arial" font-size="12" fill="#666">AI</text>
+        </svg>"""
+        return base64.b64encode(placeholder_svg.encode()).decode()
 
 
-def img_to_html(img_path: str) -> str:
-    img_html = "<img src='data:image/png;base64,{}' class='img-fluid'>".format(
-        img_to_bytes(img_path)
-    )
-    return img_html
+def img_to_html(img_path: str | Path) -> str:
+    """Convert image file to HTML img tag with base64 data."""
+    try:
+        img_path = Path(img_path)
+        if not img_path.exists():
+            return "<div style='width:40px;height:40px;background:#f0f0f0;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:12px;color:#666;'>AI</div>"
+
+        img_html = "<img src='data:image/png;base64,{}' class='img-fluid'>".format(
+            img_to_bytes(img_path)
+        )
+        return img_html
+    except Exception as e:
+        print(f"Warning: Could not create HTML for image {img_path}: {e}")
+        return "<div style='width:40px;height:40px;background:#f0f0f0;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:12px;color:#666;'>AI</div>"
 
 
 def replace_img_tag(html_content: str) -> str:
@@ -76,65 +95,56 @@ def replace_img_tag(html_content: str) -> str:
         flags=re.IGNORECASE,
     )
 
-def plan_to_markdown(plan: dict) -> str:
-    """Turn planner JSON into a readable outline."""
-    if not isinstance(plan, dict):
-        return "*(Invalid plan format)*"
 
-    out = []
-    goal = plan.get("goal")
-    if goal:
-        out.append(f"**Goal:** {goal}\n")
 
-    assumptions = plan.get("assumptions") or []
-    if assumptions:
-        out.append("**Assumptions**")
-        for a in assumptions:
-            out.append(f"- {a}")
-        out.append("")
+def get_or_create_user_id() -> str:
+    """Retrieve or create a persistent (per-URL) user id.
 
-    inputs = plan.get("inputs_summary") or {}
-    if inputs:
-        out.append("**Inputs**")
-        for k, v in inputs.items():
-            out.append(f"- **{k}**: {v}")
-        out.append("")
+    Mirrors logic from reference app: prefer session_state, else query params, else new uuid.
+    Adds it back into URL params for share/resume convenience.
+    """
+    # Existing in session
+    if USER_ID_COOKIE in st.session_state:
+        return st.session_state[USER_ID_COOKIE]
 
-    steps = plan.get("steps") or []
-    if steps:
-        out.append("**Plan**")
-        for i, s in enumerate(steps, 1):
-            tool = s.get("tool", "<?>")
-            args = s.get("args", {})
-            explain = s.get("explain", "")
-            # concise args rendering
-            arg_pairs = ", ".join(f"{k}={v}" for k, v in args.items())
-            line = f"{i}. **{tool}**({arg_pairs})"
-            if explain:
-                line += f" — {explain}"
-            out.append(line)
-        out.append("")
+    # Provided in URL
+    if USER_ID_COOKIE in st.query_params:
+        user_id = st.query_params[USER_ID_COOKIE]
+        st.session_state[USER_ID_COOKIE] = user_id
+        return user_id
 
-    artifacts = plan.get("artifacts") or []
-    if artifacts:
-        out.append("**Artifacts**")
-        for a in artifacts:
-            out.append(f"- {a}")
-        out.append("")
+    # Create new
+    user_id = str(uuid.uuid4())
+    st.session_state[USER_ID_COOKIE] = user_id
+    st.query_params[USER_ID_COOKIE] = user_id
+    return user_id
 
-    crit = plan.get("success_criteria") or []
-    if crit:
-        out.append("**Success criteria**")
-        for c in crit:
-            out.append(f"- {c}")
 
-    return "\n".join(out).strip()
+def safe_status(label: str, **kwargs):
+    """Wrapper around st.status that strips unsupported surrogate pairs.
+
+    If a UnicodeEncodeError occurs, fall back to ASCII friendly label.
+    """
+    try:
+        return st.status(label, **kwargs)
+    except UnicodeEncodeError:
+        safe_label = label.encode("utf-8", "ignore").decode("utf-8")
+        # Remove any leftover lone surrogates just in case
+        safe_label = safe_label.encode("utf-16", "surrogatepass").decode(
+            "utf-16", "ignore"
+        )
+        # Fallback: strip emoji entirely if still problematic
+        safe_label = re.sub(r"[\u2600-\u27BF\U0001F000-\U0001FAFF]", "", safe_label)
+        return st.status(safe_label, **kwargs)
 
 
 async def main() -> None:
+    # Set page icon only if it exists
+    page_icon = APP_ICON if APP_ICON.exists() else None
+
     st.set_page_config(
         page_title=APP_TITLE,
-        page_icon=APP_ICON,
+        page_icon=page_icon,
         menu_items={},
     )
 
@@ -157,12 +167,15 @@ async def main() -> None:
     #     await asyncio.sleep(0.1)
     #     st.rerun()
 
+    # Obtain / persist a user id (not currently sent to backend, reserved for future use)
+    user_id = get_or_create_user_id()
+
     if "agent_client" not in st.session_state:
         load_dotenv()
         agent_url = os.getenv("AGENT_URL")
         if not agent_url:
             host = os.getenv("HOST", "0.0.0.0")
-            port = os.getenv("PORT", 8080)
+            port = os.getenv("PORT", 8083)
             agent_url = f"http://{host}:{port}"
         try:
             with st.spinner("Connecting to agent service..."):
@@ -177,7 +190,8 @@ async def main() -> None:
     if "thread_id" not in st.session_state:
         thread_id = st.query_params.get("thread_id")
         if not thread_id:
-            thread_id = get_script_run_ctx().session_id
+            # Switch to uuid for shareable / multi-session separation
+            thread_id = str(uuid.uuid4())
             messages = []
         else:
             try:
@@ -190,54 +204,51 @@ async def main() -> None:
         st.session_state.messages = messages
         st.session_state.thread_id = thread_id
 
-        if "last_plan" not in st.session_state:
-            st.session_state.last_plan = None
-        if "edited_plan" not in st.session_state:
-            st.session_state.edited_plan = None
 
     # Config options
     with st.sidebar:
-        # Add header with inline icon image
+        # Header w/ icon
         st.markdown(
             f"""
-            <h1 style="display: flex; align-items: center;">
-                <img src="data:image/svg+xml;base64,{img_to_bytes(APP_ICON)}" width="40" style="margin-right: 10px;">
-                  {APP_TITLE}
+            <h1 style=\"display: flex; align-items: center;\">
+                <img src=\"data:image/svg+xml;base64,{img_to_bytes(APP_ICON)}\" width=\"40\" style=\"margin-right: 10px;\">
+                {APP_TITLE}
             </h1>
             """,
             unsafe_allow_html=True,
         )
-        # Description
-        st.markdown(
-            """
-            AI agent built with LangGraph, FastAPI and Streamlit
-            """
-        )
+        st.caption("LangGraph + FastAPI + Streamlit agent interface")
+
+        # New Chat button
+        if st.button(":material/chat: New Chat", use_container_width=True):
+            st.session_state.messages = []
+            st.session_state.thread_id = str(uuid.uuid4())
+            st.rerun()
+
         with st.popover(":material/settings: Settings", use_container_width=True):
-            model_idx = agent_client.info.models.index(agent_client.info.default_model)
-            model = st.selectbox(
-                "LLM to use", options=agent_client.info.models, index=model_idx
+            # Convert models to strings for display
+            model_options = [str(m) for m in agent_client.info.models]
+            default_model_str = str(agent_client.info.default_model)
+            model_idx = (
+                model_options.index(default_model_str)
+                if default_model_str in model_options
+                else 0
             )
+            model = st.selectbox("LLM to use", options=model_options, index=model_idx)
             agent_list = [a.key for a in agent_client.info.agents]
             agent_idx = agent_list.index(agent_client.info.default_agent)
             agent_client.agent = st.selectbox(
-                "Agent to use",
-                options=agent_list,
-                index=agent_idx,
+                "Agent to use", options=agent_list, index=agent_idx
             )
             use_streaming = st.toggle("Stream results", value=True)
-        st.markdown("----")
-        use_planner = st.toggle(
-            "Planner mode",
-            value = False,
-            help="When on, your message goes to /dft-planner/plan and the JSON plan is shown.")
-        code_choice = st.selectbox("DFT code for planning", ["qe", "vasp"], index=0)
+            # Display user id (read-only)
+            st.text_input("User ID", value=user_id, disabled=True)
         with st.popover(":material/policy: Privacy", use_container_width=True):
             st.write(
                 "Prompts, responses and feedback in this app are anonymously recorded for evaluation and improvement purposes."
             )
 
-        @st.dialog("Share chat")
+        @st.dialog("Share Chat")
         def share_chat_dialog() -> None:
             session = st.runtime.get_instance()._session_mgr.list_active_sessions()[0]
             st_base_url = urllib.parse.urlunparse(
@@ -250,21 +261,27 @@ async def main() -> None:
                     "",
                 ]
             )
-            # if it's not localhost, switch to https by default
             if not st_base_url.startswith("https") and "localhost" not in st_base_url:
                 st_base_url = st_base_url.replace("http", "https")
-            chat_url = f"{st_base_url}?thread_id={st.session_state.thread_id}"
+            chat_url = f"{st_base_url}?thread_id={st.session_state.thread_id}&{USER_ID_COOKIE}={user_id}"
             st.markdown(f"**Chat URL:**\n```text\n{chat_url}\n```")
             st.info("Copy the above URL to share or resume this chat")
 
-        if st.button(":material/upload: Share chat", use_container_width=True):
+        if st.button(":material/upload: Share Chat", use_container_width=True):
             share_chat_dialog()
 
     # Draw existing messages
     messages: list[ChatMessage] = st.session_state.messages
 
     if len(messages) == 0:
-        WELCOME = "Hello! I'm an AI-powered chat assistant. How can I help you?"
+        # Basic agent-specific welcome variants (extendable)
+        match agent_client.agent:
+            case "chatbot":
+                WELCOME = "Hello! I'm a simple chatbot. Ask me anything!"
+            case "dft_agent":
+                WELCOME = "Hi! I'm the DFT workflow agent. Provide a materials/DFT request to begin."
+            case _:
+                WELCOME = "Hello! I'm an AI-powered chat assistant. How can I help you?"
         with st.chat_message("ai"):
             st.write(WELCOME)
 
@@ -280,124 +297,30 @@ async def main() -> None:
         messages.append(ChatMessage(type="human", content=user_input))
         st.chat_message("human").write(user_input)
         try:
-            if use_planner:
-                RECENCY_WINDOW = 6
-                base_url = st.session_state.get("agent_url") or os.getenv("AGENT_URL") or "http://localhost:8080"
-                history_dicts = [msg.model_dump() for msg in st.session_state.messages]
-                relevant_history= history_dicts[-RECENCY_WINDOW:]
-                result = fetch_plan(base_url, user_input, hints=None, code={"code": code_choice},
-                                    history = relevant_history)
-                plan = result.get("plan", {})
-                workroot = result.get("workroot", "")
-                # keep originals for diff / reset
-                st.session_state.last_plan = copy.deepcopy(plan)
-                st.session_state.edited_plan = None
-
-                pretty = plan_to_markdown(plan)
-
-                plan_md = "**Plan generated**  \n"
-                if workroot:
-                    plan_md += f"_Workspace_: `{workroot}`\n\n"
-                plan_md += pretty
-
-                plan_msg = ChatMessage(type="ai", content=plan_md)
-                messages.append(plan_msg)
-                st.rerun()
+            if use_streaming:
+                stream = agent_client.astream(
+                    message=user_input,
+                    model=model,
+                    thread_id=st.session_state.thread_id,
+                )  # user_id reserved (backend not expecting yet)
+                await draw_messages(stream, is_new=True)
             else:
-                if use_streaming:
-                    stream = agent_client.astream(
-                        message=user_input,
-                        model=model,
-                        thread_id=st.session_state.thread_id,
-                    )
-                    await draw_messages(stream, is_new=True)
-                else:
-                    response = await agent_client.ainvoke(
-                        message=user_input,
-                        model=model,
-                        thread_id=st.session_state.thread_id,
-                    )
-                    messages.append(response)
-                    st.chat_message("ai").write(response.content)
-                st.rerun()
+                response = await agent_client.ainvoke(
+                    message=user_input,
+                    model=model,
+                    thread_id=st.session_state.thread_id,
+                )
+                messages.append(response)
+                st.chat_message("ai").write(response.content)
+            st.rerun()
         except AgentClientError as e:
             st.error(f"Error generating response: {e}")
             st.stop()
         except Exception as e:
-            st.error(f"Planner error: {e}")
+            st.error(f"Error: {e}")
             st.stop()
 
-    if st.session_state.get("last_plan"):
-        if len(messages) > 0 and messages[-1].type == "ai":
-            with st.chat_message("ai"):
-                plan_to_show = st.session_state.get("edited_plan") or st.session_state.get("last_plan")
-                st.markdown(plan_to_markdown(plan_to_show))
-            with st.expander("Edit plan JSON", expanded=True):  #
-                default_text = json.dumps(plan_to_show, indent=2)  #
-                plan_text = st.text_area(  #
-                    "Tweak and validate",  #
-                    default_text,  #
-                    key=f"edit_plan_{len(messages)}",  #
-                    height=340,  #
-                )  #
-                cols = st.columns([1, 1, 1, 2])  #
-                with cols[0]:  #
-                    # --- This button logic now contains the complete fix ---
-                    if st.button("Validate edits"):  #
-                        try:  #
-                            candidate = json.loads(plan_text)  #
-                            errs = validate_plan_schema(candidate)  #
-                            if errs:  #
-                                st.error("Found issues:\n- " + "\n- ".join(errs))  #
-                            else:  #
-                                st.session_state.edited_plan = candidate  #
-                                diffs = diff_plans(st.session_state.last_plan, candidate)  #
-                                if diffs:  #
-                                    st.success("Valid JSON Changes:\n- " + "\n- ".join(diffs))  #
-                                else:  #
-                                    st.success("Valid JSON (no changes)")  #
-
-                                # THE FIX: Update message content and rerun to show the changes
-                                new_plan_md = plan_to_markdown(candidate)
-                                st.session_state.messages[-1].content = new_plan_md
-                                st.rerun()
-
-                        except Exception as e:  #
-                            st.error(f"Invalid JSON: {e}")  #
-
-                with cols[1]:  #
-                    if st.button("Reset edits"):  #
-                        st.session_state.edited_plan = None  #
-                        # Also reset the message content to the original plan
-                        original_plan_md = plan_to_markdown(st.session_state.last_plan)
-                        st.session_state.messages[-1].content = original_plan_md
-                        st.rerun()  #
-
-                with cols[2]:  #
-                    download_obj = st.session_state.edited_plan or st.session_state.last_plan  #
-                    st.download_button(  #
-                        "Download JSON",  #
-                        data=json.dumps(download_obj or {}, indent=2),  #
-                        file_name="dft_plan.json",  #
-                        mime="application/json",  #
-                    )  #
-
-            # Dry run (no backend execution) to show step list and catch issues
-            with st.expander("Dry run (no execution)"):  #
-                plan_use = st.session_state.edited_plan or st.session_state.last_plan  #
-                problems = validate_plan_schema(plan_use)  #
-                if problems:  #
-                    st.error("Please fix these before running:\n\n- " + "\n- ".join(problems))  #
-                else:  #
-                    st.success("Plan looks consistent")  #
-                    for idx, step in enumerate(plan_use.get("steps", []), 1):  #
-                        tool = step.get("tool")  #
-                        args = step.get("args", {})  #
-                        arg_str = ", ".join(f"{k}={v}" for k, v in args.items())  #
-                        st.write(f"{idx}. **{tool}**({arg_str})")  #
-                    st.caption("Simulation only—no DFT jobs submitted.")
-
-                    # If messages have been generated, show feedback widget
+    # If messages have been generated, show feedback widget
     if len(messages) > 0 and st.session_state.last_message:
         with st.session_state.last_message:
             await handle_feedback()
@@ -453,7 +376,15 @@ async def draw_messages(
             st.error(f"Unexpected message type: {type(msg)}")
             st.write(msg)
             st.stop()
-        match msg.type:
+
+        # Normalize message type to handle any case sensitivity issues
+        msg_type = (
+            msg.type.strip().lower()
+            if isinstance(msg.type, str)
+            else str(msg.type).strip().lower()
+        )
+
+        match msg_type:
             # Messages from the user
             case "human":
                 last_message_type = "human"
@@ -481,39 +412,83 @@ async def draw_messages(
                             st.write(replace_img_tag(msg.content), unsafe_allow_html=True)
 
                     if msg.tool_calls:
-                        # Create a status container for each tool call and store the
-                        # status container by ID to ensure results are mapped to the
-                        # correct status container
-                        call_results = {}
-                        for tool_call in msg.tool_calls:
-                            status = st.status(
-                                f"""Tool Call: {tool_call["name"]}""",
-                                state="running" if is_new else "complete",
-                            )
-                            call_results[tool_call["id"]] = status
-                            status.write("Input:")
-                            status.write(tool_call["args"])
-
-                        # Expect one ToolMessage for each tool call
-                        for _ in range(len(call_results)):
-                            tool_result: ChatMessage = await anext(messages_agen)
-                            if tool_result.type != "tool":
-                                st.error(
-                                    f"Unexpected ChatMessage type: {tool_result.type}"
+                        # Detect if this is a delegated / transfer style tool call
+                        if any(
+                            "transfer_to" in tc.get("name", "") for tc in msg.tool_calls
+                        ):
+                            # Handle nested / delegated agent session
+                            for tc in msg.tool_calls:
+                                if "transfer_to" in tc.get("name", ""):
+                                    status = safe_status(
+                                        f"🤖 Sub Agent: {tc['name']}",
+                                        state="running" if is_new else "complete",
+                                        expanded=True,
+                                    )
+                                    await handle_sub_agent_msgs(
+                                        messages_agen, status, is_new
+                                    )
+                        else:
+                            # Standard tool call rendering
+                            call_results = {}
+                            for tool_call in msg.tool_calls:
+                                status = safe_status(
+                                    f"🛠️ Tool Call: {tool_call['name']}",
+                                    state="running" if is_new else "complete",
                                 )
-                                st.write(tool_result)
-                                st.stop()
+                                call_results[tool_call["id"]] = status
+                                status.write("Input:")
+                                status.write(tool_call["args"])
 
-                            if is_new:
-                                st.session_state.messages.append(tool_result)
-                            status = call_results[tool_result.tool_call_id]
-                            status.write("Output:")
-                            status.write(tool_result.content)
-                            status.update(state="complete")
+                            # Expect one ToolMessage for each tool call
+                            for _ in range(len(call_results)):
+                                tool_result: ChatMessage = await anext(messages_agen)
+                                if tool_result.type != "tool":
+                                    st.error(
+                                        f"Unexpected ChatMessage type: {tool_result.type}"
+                                    )
+                                    st.write(tool_result)
+                                    st.stop()
+
+                                if is_new:
+                                    st.session_state.messages.append(tool_result)
+                                    status = call_results.get(tool_result.tool_call_id)
+                                if status:
+                                    status.write("Output:")
+                                    status.write(tool_result.content)
+                                    status.update(state="complete")
+            case "custom":
+                # Future custom message handling placeholder
+                if is_new:
+                    st.session_state.messages.append(msg)
+                if last_message_type != "custom":
+                    last_message_type = "custom"
+                    st.session_state.last_message = st.chat_message("ai")
+                with st.session_state.last_message:
+                    if msg.content:
+                        st.write(msg.content)
+
+            # Handle tool messages that might come through the main loop
+            case "tool":
+                if is_new:
+                    st.session_state.messages.append(msg)
+
+                # Display tool results in the current AI message container
+                if st.session_state.last_message:
+                    with st.session_state.last_message:
+                        st.write(f"**Tool Result:** {msg.content}")
+                else:
+                    # If no AI message container exists, create one
+                    last_message_type = "ai"
+                    st.session_state.last_message = st.chat_message("ai")
+                    with st.session_state.last_message:
+                        st.write(f"**Tool Result:** {msg.content}")
 
             # For unexpected message types, log an error and stop
             case _:
-                st.error(f"Unexpected ChatMessage type: {msg.type}")
+                if hasattr(msg, "type"):
+                    st.error(f"Unexpected ChatMessage type: {msg.type}")
+                else:
+                    st.error(f"Unexpected message format: {type(msg)}")
                 st.write(msg)
                 st.stop()
 
@@ -549,6 +524,70 @@ async def handle_feedback() -> None:
             st.stop()
         st.session_state.last_feedback = (latest_run_id, feedback)
         st.toast("Feedback recorded", icon=":material/reviews:")
+
+
+async def handle_sub_agent_msgs(messages_agen, status, is_new):
+    """Handle nested delegated agent tool call message sequences.
+
+    Reads subsequent messages until a *transfer_back_to* tool call completes.
+    """
+    nested_popovers = {}
+
+    first_msg = await anext(messages_agen)
+    if first_msg and is_new:
+        st.session_state.messages.append(first_msg)
+
+    while True:
+        sub_msg = await anext(messages_agen)
+        if sub_msg is None:
+            break
+        if is_new and hasattr(sub_msg, "type"):
+            st.session_state.messages.append(sub_msg)
+
+        # Tool result mapping for previously opened popover
+        if (
+            getattr(sub_msg, "type", None) == "tool"
+            and getattr(sub_msg, "tool_call_id", None) in nested_popovers
+        ):
+            pop = nested_popovers[sub_msg.tool_call_id]
+            pop.write("**Output:**")
+            pop.write(sub_msg.content)
+            continue
+
+        # Completion condition: transfer back
+        if (
+            hasattr(sub_msg, "tool_calls")
+            and sub_msg.tool_calls
+            and any("transfer_back_to" in tc.get("name", "") for tc in sub_msg.tool_calls)
+        ):
+            for tc in sub_msg.tool_calls:
+                if "transfer_back_to" in tc.get("name", ""):
+                    transfer_result = await anext(messages_agen)
+                    if transfer_result and is_new:
+                        st.session_state.messages.append(transfer_result)
+            status.update(state="complete")
+            break
+
+        # Regular content
+        if status and getattr(sub_msg, "content", None):
+            status.write(sub_msg.content)
+
+        # Nested tool calls inside delegated agent
+        if status and hasattr(sub_msg, "tool_calls") and sub_msg.tool_calls:
+            for tc in sub_msg.tool_calls:
+                if "transfer_to" in tc.get("name", ""):
+                    nested_status = safe_status(
+                        f"🤖 Sub Agent: {tc['name']}",
+                        state="running" if is_new else "complete",
+                        expanded=True,
+                    )
+                    await handle_sub_agent_msgs(messages_agen, nested_status, is_new)
+                else:
+                    popover = status.popover(f"{tc['name']}", icon="🛠️")
+                    popover.write(f"**Tool:** {tc['name']}")
+                    popover.write("**Input:**")
+                    popover.write(tc.get("args", {}))
+                    nested_popovers[tc.get("id")] = popover
 
 
 if __name__ == "__main__":

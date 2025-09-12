@@ -8,18 +8,20 @@ requires-python = ">=3.12, <3.13"
 dependencies = [
     "ase",
     "beautifulsoup4",
-    "duckduckgo-search",
+    "ddgs",
     "fastapi",
     "google-api-python-client",
     "google-auth-httplib2",
     "google-auth-oauthlib",
     "httpx",
     "langchain-anthropic",
+    "langchain-cerebras",
     "langchain-community",
     "langchain-core",
     "langchain-experimental",
     "langchain-huggingface",
     "langchain-groq",
+    "langchain-mcp-adapters",
     "langchain-ollama",
     "langchain-openai",
     "langgraph",
@@ -37,6 +39,7 @@ dependencies = [
     "python-dotenv",
     "python-multipart",
     "requests",
+    "pypdf",
     "seaborn",
     "seekpath",
     "setuptools",
@@ -45,6 +48,7 @@ dependencies = [
     "tiktoken",
     "typing-extensions",
     "uvicorn",
+    "langchain-mcp-adapters>=0.1.9",
 ]
 
 [dependency-groups]
@@ -57,7 +61,8 @@ client = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
+exclude = ["dist", "build", "scripts", "data", "logs", "WORKSPACE", ".venv"]
 
 [tool.uv]
 dev-dependencies = [

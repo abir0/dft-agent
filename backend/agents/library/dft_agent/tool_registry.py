@@ -1,27 +1,63 @@
 from langchain_core.tools import Tool
 
-from backend.agents.dft_tools.pmg_vasp import (
-    write_vasp_scf, write_vasp_relax,
-    parse_vasp_energy,
+# Import all comprehensive DFT tools
+from backend.agents.dft_tools import (
+    add_adsorbate,
+    add_vacuum,
+    analyze_crystal_structure,
+    calculate_formation_energy,
+    check_job_status,
+    create_calculations_database,
+    create_supercell,
+    cutoff_convergence_test,
+    export_results,
+    extract_energy,
+    find_pseudopotentials,
+    generate_bulk,
+    generate_qe_input,
+    generate_slab,
+    kpoint_convergence_test,
+    query_calculations,
+    read_output_file,
+    search_materials_project,
+    search_similar_calculations,
+    slab_thickness_convergence,
+    store_adsorption_energy,
+    store_calculation,
+    submit_local_job,
+    update_calculation_status,
+    vacuum_convergence_test,
 )
-from backend.agents.dft_tools.pmg_qe import (
-    write_qe_scf,
-    parse_qe_energy
-)
-from backend.agents.dft_tools.struct_tools import (
-    build_structure, make_supercell,
-)
-#from backend.agents.dft_tools.neb import neb_setup, neb_run, neb_parse_results
-#from backend.agents.dft_tools.hpc import write_hpc_script_vasp, write_hpc_script_qe
-from backend.agents.dft_tools.pmg_run import run_local
 
 TOOL_REGISTRY: dict[str, Tool] = {
-    "build_structure": build_structure,
-    "make_supercell": make_supercell,
-    "write_vasp_scf": write_vasp_scf,
-    "write_vasp_relax": write_vasp_relax,
-    "parse_vasp_energy": parse_vasp_energy,
-    "write_qe_scf": write_qe_scf,
-    "parse_qe_energy": parse_qe_energy,
-    "run_local": run_local,
+    # Structure generation and manipulation
+    "generate_bulk": generate_bulk,
+    "create_supercell": create_supercell,
+    "generate_slab": generate_slab,
+    "add_adsorbate": add_adsorbate,
+    "add_vacuum": add_vacuum,
+    # Pymatgen integration tools
+    "search_materials_project": search_materials_project,
+    "analyze_crystal_structure": analyze_crystal_structure,
+    "find_pseudopotentials": find_pseudopotentials,
+    "calculate_formation_energy": calculate_formation_energy,
+    # Quantum ESPRESSO interface
+    "generate_qe_input": generate_qe_input,
+    "submit_local_job": submit_local_job,
+    "check_job_status": check_job_status,
+    "read_output_file": read_output_file,
+    "extract_energy": extract_energy,
+    # Convergence testing
+    "kpoint_convergence_test": kpoint_convergence_test,
+    "cutoff_convergence_test": cutoff_convergence_test,
+    "slab_thickness_convergence": slab_thickness_convergence,
+    "vacuum_convergence_test": vacuum_convergence_test,
+    # Database management
+    "create_calculations_database": create_calculations_database,
+    "store_calculation": store_calculation,
+    "update_calculation_status": update_calculation_status,
+    "store_adsorption_energy": store_adsorption_energy,
+    "query_calculations": query_calculations,
+    "export_results": export_results,
+    "search_similar_calculations": search_similar_calculations,
 }

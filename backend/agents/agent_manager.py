@@ -1,33 +1,66 @@
-# backend/agents/agent_manager.py
+from dataclasses import dataclass
+from typing import Callable, Optional
+
+from langgraph.graph.state import CompiledStateGraph
 
 from backend.core import AgentInfo
 
-DEFAULT_AGENT = "dft_planner"
+DEFAULT_AGENT = "dft_agent"
 
-class DFTPlannerAgent:
-    checkpointer = None  # optional hook
 
-    def plan(self, request_text: str, hints: dict | None = None, code: dict | None = None) -> dict:
-        # Import here so a planner bug doesn't crash FastAPI boot
-        from backend.agents.library.dft_agent.planner_graph import generate_plan
-        return generate_plan(request_text, hints or {}, code or {})
+@dataclass
+class AgentConfig:
+    description: str
+    factory: Callable[[], CompiledStateGraph]
+    _cached_graph: Optional[CompiledStateGraph] = None
 
-# registry meta for /info
-_AGENTS = {
-    "dft_planner": AgentInfo(key="dft_planner", name="DFT Planner",
-                             description="Plans DFT workflows and returns strict JSON."),
-    "chatbot":     AgentInfo(key="chatbot", name="Chatbot",
-                             description="A simple chatbot."),
+    def get_graph(self) -> CompiledStateGraph:
+        """Lazy-load the graph when first accessed."""
+        if self._cached_graph is None:
+            self._cached_graph = self.factory()
+        return self._cached_graph
+
+
+def _create_chatbot():
+    from backend.agents.library.chatbot import chatbot
+
+    return chatbot
+
+
+def _create_dft_agent():
+    from backend.agents.library.dft_agent.agent import dft_agent
+
+    return dft_agent
+
+
+def _create_slurm_scheduler():
+    from backend.agents.library.slurm_scheduler.agent import slurm_scheduler_agent
+
+    return slurm_scheduler_agent
+
+
+agent_configs: dict[str, AgentConfig] = {
+    "chatbot": AgentConfig(
+        description="Assistant for DFT workflows, structure generation, QE input creation, SLURM job management, and materials science calculations",
+        factory=_create_chatbot,
+    ),
+    "dft_agent": AgentConfig(
+        description="Expert DFT agent for computational materials science workflows",
+        factory=_create_dft_agent,
+    ),
+    "slurm_scheduler": AgentConfig(
+        description="SLURM job scheduler agent for HPC job management and automation",
+        factory=_create_slurm_scheduler,
+    ),
 }
 
-def get_agent(agent_id: str):
-    if agent_id == "dft_planner":
-        return DFTPlannerAgent()
-    elif agent_id == "chatbot":
-        # import lazily too
-        from backend.agents.library.chatbot import chatbot
-        return chatbot  # if you still want to return the compiled graph for the chatbot
-    raise KeyError(agent_id)
+
+def get_agent(agent_id: str) -> CompiledStateGraph:
+    return agent_configs[agent_id].get_graph()
+
 
 def get_all_agent_info() -> list[AgentInfo]:
-    return list(_AGENTS.values())
+    return [
+        AgentInfo(key=agent_id, description=config.description)
+        for agent_id, config in agent_configs.items()
+    ]
