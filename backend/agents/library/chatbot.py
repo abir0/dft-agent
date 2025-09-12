@@ -21,6 +21,12 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from backend.agents.asta_mcp_client import get_specific_asta_tools
 from backend.agents.llm import get_model, settings
 from backend.agents.tools import calculator, python_repl
+from backend.agents.dft_tools import (
+    search_materials_project,
+    analyze_crystal_structure,
+    calculate_formation_energy,
+    find_pseudopotentials,
+)
 
 
 class AgentState(MessagesState, total=False):
@@ -191,6 +197,11 @@ base_tools = [
     calculator,
     python_repl,
     fetch_open_access_full_text,
+    # Materials Project / Pymatgen tools (shared with DFT agent)
+    search_materials_project,
+    analyze_crystal_structure,
+    calculate_formation_energy,
+    find_pseudopotentials,
 ]
 
 # Global variable to cache loaded tools
@@ -258,6 +269,12 @@ instructions = f"""
       fetch_open_access_full_text tool to retrieve the article's full text for analysis.
     - Use the search_authors_by_name and get_author_papers tools to find papers by specific researchers.
     - If Asta scientific paper search tools return 403 Forbidden errors, inform the user that there may be an API key permission issue and suggest using web search instead.
+    
+    Materials Project / Pymatgen tools (use when applicable):
+    - search_materials_project: Use to retrieve candidate materials, properties, and CIFs from Materials Project given a formula (e.g., "TiO2", "LiFePO4"). Prefer this over web search when you need authoritative structures/properties. Reads MP_API_KEY from environment if not passed.
+    - analyze_crystal_structure: Use on a provided structure file (e.g., CIF/POSCAR/XYZ) to get crystal system, space group, lattice parameters, conventional cell, and coordination; then reference the saved analysis artifacts.
+    - find_pseudopotentials: Use to propose pseudopotential filenames for a set of elements (PSL PBE by default). Include a brief note to verify availability in the user’s PP directory.
+    - calculate_formation_energy: Use when the user provides a structure and a computed total energy plus element reference energies to report formation energy (total and per atom).
     - Please include markdown-formatted links to any citations used in your response. Only include one
     or two citations per response unless more are needed. ONLY USE LINKS RETURNED BY THE TOOLS.
     - Use calculator tool with numexpr to answer math questions. The user does not understand numexpr,

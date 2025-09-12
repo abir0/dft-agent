@@ -7,6 +7,12 @@ faiss_index/
 logs/
 credentials.json
 
+# Materials Project outputs
+materials_project_data/
+pseudopotentials/
+**/analysis/
+**/formation_energies/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
