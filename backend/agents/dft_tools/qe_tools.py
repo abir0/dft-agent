@@ -142,20 +142,64 @@ def generate_qe_input(
         if kpts is None:
             kpts = get_kpoints(atoms, kspacing)
 
-        # Default pseudopotentials
+        # Get pseudopotentials using the comprehensive database
         if pseudopotentials is None:
-            pseudopotentials = {}
-            for el in elements:
-                # Use more comprehensive PP selection
-                if el in ["H", "He"]:
-                    pseudopotentials[el] = f"{el}.pbe-rrkjus_psl.1.0.0.UPF"
-                elif el in ["Li", "Be", "B", "C", "N", "O", "F", "Ne"]:
-                    pseudopotentials[el] = f"{el}.pbe-n-rrkjus_psl.1.0.0.UPF"
-                elif el in ["Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar"]:
-                    pseudopotentials[el] = f"{el}.pbe-n-rrkjus_psl.1.0.0.UPF"
+            try:
+                from backend.agents.dft_tools.pymatgen_tools import find_pseudopotentials
+                pp_result = find_pseudopotentials.invoke({
+                    'elements': elements,
+                    'pp_type': 'PAW',
+                    'functional': input_dft.lower(),
+                    'quality': 'high'
+                })
+                
+                if 'found_pseudopotentials' in pp_result and pp_result['found_pseudopotentials']:
+                    pseudopotentials = {}
+                    for el, pp_path in pp_result['found_pseudopotentials'].items():
+                        pseudopotentials[el] = Path(pp_path).name  # Use only filename
+                    
+                    # Use recommended cutoff energies from the database
+                    if 'parameters' in pp_result:
+                        # Find the highest recommended cutoff for any element
+                        max_ecutwfc = 0
+                        max_ecutrho = 0
+                        for el, params in pp_result['parameters'].items():
+                            cutoff = params.get('cutoff_energy', {})
+                            max_ecutwfc = max(max_ecutwfc, cutoff.get('ecutwfc', 60.0))
+                            max_ecutrho = max(max_ecutrho, cutoff.get('ecutrho', 300.0))
+                        
+                        # Update cutoff energies if they're higher than defaults
+                        if max_ecutwfc > ecutwfc:
+                            ecutwfc = max_ecutwfc
+                        if max_ecutrho > (ecutrho or 4 * ecutwfc):
+                            ecutrho = max_ecutrho
                 else:
-                    # For transition metals and heavy elements
-                    pseudopotentials[el] = f"{el}.pbe-spn-rrkjus_psl.1.0.0.UPF"
+                    # Fallback to default pseudopotentials if tool fails
+                    pseudopotentials = {}
+                    for el in elements:
+                        if el in ["H", "He"]:
+                            pseudopotentials[el] = f"{el}.pbe-rrkjus_psl.1.0.0.UPF"
+                        elif el in ["Li", "Be", "B", "C", "N", "O", "F", "Ne"]:
+                            pseudopotentials[el] = f"{el}.pbe-n-rrkjus_psl.1.0.0.UPF"
+                        elif el in ["Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar"]:
+                            pseudopotentials[el] = f"{el}.pbe-n-rrkjus_psl.1.0.0.UPF"
+                        else:
+                            # For transition metals and heavy elements
+                            pseudopotentials[el] = f"{el}.pbe-spn-rrkjus_psl.1.0.0.UPF"
+            except Exception as e:
+                print(f"Warning: Could not use find_pseudopotentials tool: {e}")
+                # Fallback to default pseudopotentials
+                pseudopotentials = {}
+                for el in elements:
+                    if el in ["H", "He"]:
+                        pseudopotentials[el] = f"{el}.pbe-rrkjus_psl.1.0.0.UPF"
+                    elif el in ["Li", "Be", "B", "C", "N", "O", "F", "Ne"]:
+                        pseudopotentials[el] = f"{el}.pbe-n-rrkjus_psl.1.0.0.UPF"
+                    elif el in ["Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar"]:
+                        pseudopotentials[el] = f"{el}.pbe-n-rrkjus_psl.1.0.0.UPF"
+                    else:
+                        # For transition metals and heavy elements
+                        pseudopotentials[el] = f"{el}.pbe-spn-rrkjus_psl.1.0.0.UPF"
 
         for k, v in pseudopotentials.items():
             pseudopotentials[k] = Path(str(v)).name  # Use only filename

@@ -8,12 +8,7 @@ from typing import Dict, Any
 from langchain_core.tools import BaseTool
 
 # Import all DFT tools
-from .ase_tools import (
-    generate_kpoint_mesh,
-    get_kpath_bandstructure,
-    relax_bulk,
-    relax_slab,
-)
+# Note: ase_tools module doesn't exist, removing import
 from .dft_calculator import (
     run_dft_calculation,
     optimize_structure_dft,
@@ -39,6 +34,7 @@ from .pymatgen_tools import (
     analyze_crystal_structure,
     calculate_formation_energy,
     find_pseudopotentials,
+    get_pseudopotential_recommendations,
     search_materials_project,
 )
 from .qe_tools import (
@@ -47,6 +43,15 @@ from .qe_tools import (
     generate_qe_input,
     read_output_file,
     submit_local_job,
+)
+from .slurm_tools import (
+    generate_slurm_script,
+    submit_slurm_job,
+    check_slurm_job_status,
+    cancel_slurm_job,
+    list_slurm_jobs,
+    get_slurm_job_output,
+    monitor_slurm_jobs,
 )
 from .structure_tools import (
     add_adsorbate,
@@ -71,16 +76,13 @@ TOOL_REGISTRY: Dict[str, BaseTool] = {
     "relax_slab_dft": relax_slab_dft,
     "test_hydrogen_atom": test_hydrogen_atom,
     
-    # ASE tools
-    "get_kpath_bandstructure": get_kpath_bandstructure,
-    "generate_kpoint_mesh": generate_kpoint_mesh,
-    "relax_bulk": relax_bulk,
-    "relax_slab": relax_slab,
+    # ASE tools (removed - module doesn't exist)
     
     # Pymatgen tools
     "search_materials_project": search_materials_project,
     "analyze_crystal_structure": analyze_crystal_structure,
     "find_pseudopotentials": find_pseudopotentials,
+    "get_pseudopotential_recommendations": get_pseudopotential_recommendations,
     "calculate_formation_energy": calculate_formation_energy,
     
     # QE tools
@@ -104,6 +106,15 @@ TOOL_REGISTRY: Dict[str, BaseTool] = {
     "query_calculations": query_calculations,
     "export_results": export_results,
     "search_similar_calculations": search_similar_calculations,
+    
+    # SLURM scheduler tools
+    "generate_slurm_script": generate_slurm_script,
+    "submit_slurm_job": submit_slurm_job,
+    "check_slurm_job_status": check_slurm_job_status,
+    "cancel_slurm_job": cancel_slurm_job,
+    "list_slurm_jobs": list_slurm_jobs,
+    "get_slurm_job_output": get_slurm_job_output,
+    "monitor_slurm_jobs": monitor_slurm_jobs,
 }
 
 # Tool categories for organization
@@ -122,17 +133,16 @@ TOOL_CATEGORIES = {
         "test_hydrogen_atom",
     ],
     "structure_optimization": [
-        "relax_bulk",
-        "relax_slab",
+        # ASE tools removed - module doesn't exist
     ],
     "kpoint_analysis": [
-        "generate_kpoint_mesh",
-        "get_kpath_bandstructure",
+        # ASE tools removed - module doesn't exist
     ],
     "materials_database": [
         "search_materials_project",
         "analyze_crystal_structure",
         "find_pseudopotentials",
+        "get_pseudopotential_recommendations",
         "calculate_formation_energy",
     ],
     "quantum_espresso": [
@@ -156,6 +166,15 @@ TOOL_CATEGORIES = {
         "query_calculations",
         "export_results",
         "search_similar_calculations",
+    ],
+    "slurm_scheduler": [
+        "generate_slurm_script",
+        "submit_slurm_job",
+        "check_slurm_job_status",
+        "cancel_slurm_job",
+        "list_slurm_jobs",
+        "get_slurm_job_output",
+        "monitor_slurm_jobs",
     ],
 }
 

@@ -77,23 +77,22 @@ def run_dft_calculation(
         # Get unique elements
         elements = list(set(atoms.get_chemical_symbols()))
         
-        # Set up pseudopotentials using pslibrary database
+        # Set up pseudopotentials using the actual database
         pseudopotentials = {}
         if pseudopotential_dir is None:
-            # Use pslibrary database to find pseudopotentials
-            pp_db_path = Path("data/inputs/pseudopotentials/pslibrary_database.json")
+            # Use the actual pslibrary database
+            pp_db_path = Path("data/inputs/pseudopotentials/pp_mapping_pslibrary.json")
             if pp_db_path.exists():
                 with open(pp_db_path, 'r') as f:
                     pp_database = json.load(f)
                 
                 for element in elements:
-                    if element in pp_database['pseudopotentials']:
-                        element_pps = pp_database['pseudopotentials'][element]['available_pseudopotentials']
+                    if element in pp_database:
+                        element_pps = pp_database[element]
                         # Find matching pseudopotential
                         for pp in element_pps:
                             if (pp['functional'] == functional and 
-                                pp['type'].lower() == 'paw' and
-                                pp['recommended']):
+                                pp['type'].upper() == 'PAW'):
                                 pseudopotentials[element] = pp['filename']
                                 break
             else:

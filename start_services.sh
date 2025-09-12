@@ -13,7 +13,7 @@ NC='\033[0m' # No Color
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR/.."  # Go to project root
+cd "$SCRIPT_DIR"
 
 echo -e "${BLUE}🚀 Starting DFT Agent Services${NC}"
 echo "=================================="
@@ -33,7 +33,7 @@ if ss -tulpn | grep -q ":8083"; then
     echo -e "${YELLOW}⚠️  Backend service already running on port 8083${NC}"
 else
     echo -e "${GREEN}🔧 Starting backend service on port 8083...${NC}"
-    PYTHONPATH="$SCRIPT_DIR/.." .venv/bin/uvicorn backend.api.main:app --host 0.0.0.0 --port 8083 --reload &
+    PYTHONPATH="$SCRIPT_DIR" .venv/bin/uvicorn backend.api.main:app --host 0.0.0.0 --port 8083 --reload &
     BACKEND_PID=$!
     echo "Backend PID: $BACKEND_PID"
     
@@ -57,7 +57,7 @@ if ss -tulpn | grep -q ":8501"; then
 else
     echo -e "${GREEN}🎨 Starting frontend service on port 8501...${NC}"
     cd frontend
-    "$SCRIPT_DIR/../.venv/bin/streamlit" run app.py &
+    "$SCRIPT_DIR/.venv/bin/streamlit" run app.py &
     FRONTEND_PID=$!
     echo "Frontend PID: $FRONTEND_PID"
     cd ..

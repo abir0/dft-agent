@@ -217,20 +217,24 @@ async def feedback(feedback: Feedback) -> FeedbackResponse:
 
 
 @router.post("/history")
-def history(input: ChatHistoryInput) -> ChatHistory:
+async def history(input: ChatHistoryInput) -> ChatHistory:
     """
     Get chat history.
     """
     # TODO: Instead of hard-coding, implement a way to get the agent from the input
     agent: CompiledStateGraph = get_agent(DEFAULT_AGENT)
     try:
-        state_snapshot = agent.get_state(
+        state_snapshot = await agent.aget_state(
             config=RunnableConfig(
                 configurable={
                     "thread_id": input.thread_id,
                 }
             )
         )
+        # Handle case where no messages exist yet
+        if not state_snapshot.values or "messages" not in state_snapshot.values:
+            return ChatHistory(messages=[])
+        
         messages: list[AnyMessage] = state_snapshot.values["messages"]
         chat_messages: list[ChatMessage] = [
             langchain_to_chat_message(m) for m in messages

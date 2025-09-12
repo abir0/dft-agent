@@ -15,6 +15,7 @@ from ase.io import read, write
 from langchain_core.tools import tool
 from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+import numpy as np
 
 from backend.utils.workspace import get_subdir_path
 
@@ -279,100 +280,34 @@ def add_adsorbate(
     site_position: Optional[List[float]] = None,
     height: float = 2.0,
     coverage: Optional[float] = None,
+    adsorption_site: str = "top",
     _thread_id: Optional[str] = None,
 ) -> str:
-    """Add adsorbate to surface slab.
+    """Add adsorbate to surface slab using robust Pymatgen-based implementation.
 
     Args:
         slab_file: Path to slab structure file
         adsorbate_formula: Adsorbate formula/name (e.g., 'CO', 'H', 'O', 'CH4')
         site_position: Two fractional surface coordinates [x, y] each between 0 and 1
-        height: Height above surface in Angstrom
+        height: Height above surface in Angstrom (distance from surface to bottom of adsorbate)
         coverage: Surface coverage (if specified, will add multiple adsorbates)
+        adsorption_site: Type of adsorption site ('top', 'bridge', 'hollow', etc.)
 
     Returns:
         String with adsorbate information and file path
     """
-    try:
-        # Default center of surface if not provided
-        if site_position is None:
-            site_position = [0.5, 0.5]
-
-        # Validate site_position early for clearer error messages & proper schema
-        if not isinstance(site_position, (list, tuple)):
-            return "Error: site_position must be a list like [x, y]."
-        if len(site_position) != 2:
-            return "Error: site_position must have exactly two values [x, y]."
-        try:
-            sx, sy = float(site_position[0]), float(site_position[1])
-        except Exception:
-            return "Error: site_position values must be numeric."
-        if not (0.0 <= sx <= 1.0 and 0.0 <= sy <= 1.0):
-            return "Error: site_position values must be within [0, 1]."
-
-        site_position = [sx, sy]
-
-        slab = read(slab_file)
-
-        # Create adsorbate molecule
-        if adsorbate_formula in ["H", "O", "N", "C", "S"]:
-            # Single atom adsorbates
-            adsorbate = Atoms(adsorbate_formula)
-        elif adsorbate_formula == "CO":
-            adsorbate = molecule("CO")
-        elif adsorbate_formula == "H2":
-            adsorbate = molecule("H2")
-        elif adsorbate_formula == "O2":
-            adsorbate = molecule("O2")
-        elif adsorbate_formula == "N2":
-            adsorbate = molecule("N2")
-        elif adsorbate_formula == "H2O":
-            adsorbate = molecule("H2O")
-        elif adsorbate_formula == "CH4":
-            adsorbate = molecule("CH4")
-        else:
-            # Try to create as molecule or atom
-            try:
-                adsorbate = molecule(adsorbate_formula)
-            except Exception:
-                adsorbate = Atoms(adsorbate_formula)
-
-        # Add adsorbate to slab
-        ase_add_adsorbate(slab, adsorbate, height, position=tuple(site_position))
-
-        input_path = Path(slab_file)
-        output_dir = get_subdir_path(_thread_id, "structures/with_adsorbates")
-
-        pos_str = f"x{site_position[0]:.2f}y{site_position[1]:.2f}"
-        stem = f"{input_path.stem}_{adsorbate_formula}_{pos_str}_h{height:.1f}"
-        output_path = output_dir / f"{stem}.cif"
-
-        write(str(output_path), slab)
-
-        metadata = {
-            "slab_file": slab_file,
-            "adsorbate": adsorbate_formula,
-            "site_position": site_position,
-            "height": height,
-            "coverage": coverage,
-            "total_atoms": len(slab),
-            "adsorbate_atoms": len(adsorbate),
-            "formula": slab.get_chemical_formula(),
-            "files": {"cif": str(output_path)},
-        }
-
-        metadata_file = output_path.with_suffix(".json")
-        with open(metadata_file, "w") as f:
-            json.dump(metadata, f, indent=2)
-
-        return (
-            f"Added {adsorbate_formula} adsorbate at {site_position}, "
-            f"height {height} Å. Total atoms: {len(slab)}. "
-            f"Saved to {output_path}"
-        )
-
-    except Exception as e:
-        return f"Error adding adsorbate: {str(e)}"
+    # Import the pymatgen-based function
+    from backend.agents.dft_tools.pymatgen_tools import add_adsorbate_pymatgen
+    
+    # Call the robust pymatgen implementation
+    return add_adsorbate_pymatgen.invoke({
+        "slab_file": slab_file,
+        "adsorbate_formula": adsorbate_formula,
+        "site_position": site_position,
+        "height": height,
+        "adsorption_site": adsorption_site,
+        "_thread_id": _thread_id
+    })
 
 
 @tool
