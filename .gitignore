@@ -1,5 +1,7 @@
 # Local data & logs
 /data/
+# Exception: Allow README.md in raw_data for documentation
+!/data/raw_data/README.md
 /workspaces/
 WORKSPACE/
 weaviate_data/
