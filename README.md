@@ -363,7 +363,7 @@ Per-thread directories under `WORKSPACE/<thread_id>/` with standardized subfolde
 calculations/  convergence_tests/  databases/  kpaths/  kpoints/  optimized/  relaxed/  results/  structures/
 ```
 
-Tools automatically place generated artifacts in the correct subfolder (e.g. QE inputs under `calculations/qe_inputs/`). Return payloads are concise; large artifacts are written to disk for persistence.
+Tools automatically place generated artifacts in the correct subfolder (e.g. QE inputs under `calculations/`). Return payloads are concise; large artifacts are written to disk for persistence.
 
 ### 🛡 Safety Notes
 
