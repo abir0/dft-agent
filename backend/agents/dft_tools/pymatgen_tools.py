@@ -7,7 +7,7 @@ analysis using Pymatgen and Materials Project API.
 
 import json
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
 from ase.io import read
 from langchain_core.tools import tool
@@ -46,10 +46,45 @@ def search_materials_project(
                 "density",
             ]
 
+        # Map common alias fields to MP Summary API fields
+        alias_map = {
+            # formula
+            "pretty_formula": "formula_pretty",
+            # energy above hull
+            "e_above_hull": "energy_above_hull",
+            "eAboveHull": "energy_above_hull",
+            # symmetry-related
+            "spacegroup": "symmetry",
+            "space_group": "symmetry",
+            "spacegroup_symbol": "symmetry",
+            "spacegroup_number": "symmetry",
+            "crystal_system": "symmetry",
+        }
+
+        normalized_fields: Set[str] = set()
+        requested = set(properties)
+        needs_symmetry = any(
+            f in requested
+            for f in (
+                "spacegroup",
+                "space_group",
+                "spacegroup_symbol",
+                "spacegroup_number",
+                "crystal_system",
+            )
+        )
+
+        for f in properties:
+            normalized_fields.add(alias_map.get(f, f))
+
+        # Ensure symmetry fetched if any symmetry alias requested
+        if needs_symmetry:
+            normalized_fields.add("symmetry")
+
         with MPRester(api_key=api_key) as mpr:
-            docs = mpr.materials.summary.search(formula=formula, fields=properties)[
-                :limit
-            ]
+            docs = mpr.materials.summary.search(
+                formula=formula, fields=sorted(normalized_fields)
+            )[:limit]
 
         if not docs:
             return f"No materials found for formula: {formula}"
