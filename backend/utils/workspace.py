@@ -69,13 +69,13 @@ class WorkspaceManager:
 
         Args:
             thread_id: Thread/chat identifier
-            subdir: Subdirectory path (e.g., 'structures', 'structures/bulk', 'calculations/qe_inputs')
+            subdir: Subdirectory path (e.g., 'structures', 'calculations')
 
         Returns:
             Path to the specified subdirectory
         """
         if not thread_id:
-            thread_id = str(uuid.uuid4())
+            thread_id = "default"
         workspace_path = self.get_workspace_path(thread_id)
         subdir_path = workspace_path / subdir
         subdir_path.mkdir(parents=True, exist_ok=True)

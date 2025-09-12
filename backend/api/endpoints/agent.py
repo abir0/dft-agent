@@ -42,7 +42,7 @@ router = APIRouter(
 
 def _parse_input(user_input: UserInput) -> tuple[dict[str, Any], UUID]:
     run_id = uuid4()
-    thread_id = user_input.thread_id or str(uuid4())
+    thread_id = user_input.thread_id or "default"
 
     configurable = {"thread_id": thread_id, "model": user_input.model}
 

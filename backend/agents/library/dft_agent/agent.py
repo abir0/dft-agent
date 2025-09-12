@@ -184,7 +184,14 @@ If user only greets or asks basic theory: respond directly (no tools, but mentio
 def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, AIMessage]:
     model = model.bind_tools(dft_tools)
     preprocessor = RunnableLambda(
-        lambda state: [SystemMessage(content=instructions)] + state["messages"],
+        lambda state: [
+            SystemMessage(
+                content=instructions.replace(
+                    "<thread_id>", state.get("thread_id", "<thread_id>") or "<thread_id>"
+                )
+            )
+        ]
+        + state["messages"],
         name="StateModifier",
     )
     return preprocessor | model
@@ -192,12 +199,20 @@ def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, AIMessa
 
 async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
     """Primary DFT agent reasoning / planning node."""
-    state.update(await initialize_agent_state(config))
+    # Initialize once per thread: only add defaults if not already present in state.
+    init_updates: Dict[str, Any] = {}
+    if "thread_id" not in state or "working_directory" not in state:
+        init_updates = await initialize_agent_state(config)
+
+    # Compose full state for model invocation (do NOT mutate original in-place for persistence semantics)
+    full_state = {**init_updates, **state}
 
     m = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
     model_runnable = wrap_model(m)
-    response = await model_runnable.ainvoke(state, config)
-    return {"messages": [response]}
+    response = await model_runnable.ainvoke(full_state, config)
+
+    # Return messages plus any initialization keys so they persist in LangGraph state
+    return {**init_updates, "messages": [response]}
 
 
 #############################################
@@ -228,27 +243,26 @@ async def custom_tool_node(state: AgentState, config: RunnableConfig) -> AgentSt
     thread_id = state.get("thread_id")
     if not thread_id:
         thread_id = config.get("configurable", {}).get("thread_id")
-        state["thread_id"] = thread_id
+    # Don't rely on in-place mutation; include in returned update instead.
 
     messages = state["messages"]
     last_message = messages[-1]
     if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
-        return {"messages": []}
+        # Still propagate thread_id if we just discovered it
+        update: Dict[str, Any] = {"messages": []}
+        if thread_id:
+            update["thread_id"] = thread_id
+        return update
 
     tool_messages: list[ToolMessage] = []
     for tool_call in last_message.tool_calls:
         tool_name = tool_call["name"]
         tool_args = (tool_call["args"] or {}).copy()
-        tool_func = TOOL_REGISTRY[tool_name]
-
-        if (
-            thread_id
-            and "_thread_id" in tool_func.__annotations__
-        ):
-            # Inject implicit workspace context
+        tool_spec = next((t for t in dft_tools if t.name == tool_name), None)
+        underlying_ann = getattr(tool_spec.func, "__annotations__", {}) if tool_spec else {}
+        if thread_id and "_thread_id" in underlying_ann:
             tool_args["_thread_id"] = thread_id
 
-        tool_spec = next((t for t in dft_tools if t.name == tool_name), None)
         if not tool_spec:
             tool_messages.append(
                 ToolMessage(
@@ -278,7 +292,11 @@ async def custom_tool_node(state: AgentState, config: RunnableConfig) -> AgentSt
                 )
             )
 
-    return {"messages": tool_messages}
+    # Ensure thread_id is persisted in graph state
+    update: Dict[str, Any] = {"messages": tool_messages}
+    if thread_id:
+        update["thread_id"] = thread_id
+    return update
 
 
 def create_tool_node_with_fallback(_tools: list) -> RunnableLambda:

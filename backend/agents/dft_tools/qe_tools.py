@@ -161,7 +161,7 @@ def generate_qe_input(
             pseudopotentials[k] = Path(str(v)).name  # Use only filename
 
         # Use workspace-specific directory if thread_id is available
-        output_dir = get_subdir_path(_thread_id, "calculations/qe_inputs")
+        output_dir = get_subdir_path(_thread_id, "calculations")
 
         # Generate filename
         input_filename = f"{job_name}_{calculation}"
