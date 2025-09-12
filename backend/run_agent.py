@@ -2,6 +2,7 @@ import asyncio
 from uuid import uuid4
 
 from dotenv import load_dotenv
+from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 
 load_dotenv()
@@ -12,7 +13,6 @@ agent = get_agent(DEFAULT_AGENT)
 
 
 async def main() -> None:
-    from langchain_core.messages import HumanMessage
     inputs = {"messages": [HumanMessage(content="Which are the top iPaaS services?")]}
     result = await agent.ainvoke(
         inputs,

@@ -39,12 +39,9 @@ def _create_slurm_scheduler():
     return slurm_scheduler_agent
 
 
-# Supervisor agent removed - functionality consolidated into chatbot
-
-
 agent_configs: dict[str, AgentConfig] = {
     "chatbot": AgentConfig(
-        description="Main DFT Agent - Comprehensive assistant for DFT workflows, structure generation, QE input creation, SLURM job management, and materials science calculations",
+        description="Assistant for DFT workflows, structure generation, QE input creation, SLURM job management, and materials science calculations",
         factory=_create_chatbot,
     ),
     "dft_agent": AgentConfig(

@@ -1,56 +1,40 @@
 #!/bin/bash
-# DFT Agent Service Stop Script
-# This script stops both the backend and frontend services
+# Minimal stop script: terminates backend (8083) and frontend (8501) processes.
+set -e
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+kill_pid_file() {
+    local f="$1"
+    [ -f "$f" ] || return 0
+    local pid
+    pid="$(cat "$f" 2>/dev/null || true)"
+    if [ -n "${pid}" ] && kill -0 "$pid" 2>/dev/null; then
+        kill "$pid" 2>/dev/null || true
+        sleep 1
+        kill -9 "$pid" 2>/dev/null || true
+        echo "stopped pid $pid ($f)"
+    fi
+    rm -f "$f"
+}
 
-echo -e "${BLUE}🛑 Stopping DFT Agent Services...${NC}"
-
-# Function to stop processes by port
-stop_by_port() {
-    local port=$1
-    local service_name=$2
-    
-    if ss -tulpn | grep -q ":$port"; then
-        echo -e "${YELLOW}🔄 Stopping $service_name on port $port...${NC}"
-        
-        # Get PIDs using ss and fuser
-        local pids=$(fuser $port/tcp 2>/dev/null || echo "")
-        if [ ! -z "$pids" ]; then
-            echo "Found PIDs: $pids"
-            kill $pids 2>/dev/null
-            sleep 2
-            
-            # Force kill if still running
-            pids=$(fuser $port/tcp 2>/dev/null || echo "")
-            if [ ! -z "$pids" ]; then
-                echo -e "${YELLOW}🔨 Force stopping $service_name...${NC}"
-                kill -9 $pids 2>/dev/null
-            fi
-        fi
-        
-        # Double check with pkill
-        pkill -f ":$port" 2>/dev/null || true
-        
-        echo -e "${GREEN}✅ $service_name stopped${NC}"
+stop_port() {
+    local port="$1"; local label="$2"
+    if ss -tulpn 2>/dev/null | grep -q ":$port"; then
+        echo "stopping $label (port $port)"
+        fuser -k "$port"/tcp 2>/dev/null || true
+        pkill -f "$port" 2>/dev/null || true
     else
-        echo -e "${YELLOW}⚠️  No $service_name found on port $port${NC}"
+        echo "$label not running"
     fi
 }
 
-# Stop services by port
-stop_by_port 8083 "Backend API service"
-stop_by_port 8501 "Streamlit frontend"
+kill_pid_file .backend.pid
+kill_pid_file .frontend.pid
 
-# Clean up any remaining processes
-echo -e "${YELLOW}🧹 Cleaning up any remaining processes...${NC}"
-pkill -f "uvicorn backend.api.main:app" 2>/dev/null || true
-pkill -f "streamlit run app.py" 2>/dev/null || true
-pkill -f "streamlit run frontend/app.py" 2>/dev/null || true
+stop_port 8083 backend
+stop_port 8501 frontend
 
-echo -e "${GREEN}🎉 All DFT Agent services have been stopped!${NC}"
+pkill -f 'uvicorn backend.api.main:app' 2>/dev/null || true
+pkill -f 'streamlit run app.py' 2>/dev/null || true
+pkill -f 'streamlit run frontend/app.py' 2>/dev/null || true
+
+echo "services stopped"

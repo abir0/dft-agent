@@ -19,9 +19,9 @@ from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
 from backend.agents.asta_mcp_client import get_specific_asta_tools
+from backend.agents.library.dft_agent.tool_registry import TOOL_REGISTRY
 from backend.agents.llm import get_model, settings
 from backend.agents.tools import calculator, python_repl
-from backend.agents.dft_tools.tool_registry import TOOL_REGISTRY
 
 
 class AgentState(MessagesState, total=False):
@@ -104,7 +104,7 @@ def fetch_open_access_full_text(url: str, max_chars: int = 60000) -> str:
 
                 reader = PdfReader(BytesIO(resp.content))
                 pages = []
-                for i, page in enumerate(reader.pages):
+                for _, page in enumerate(reader.pages):
                     try:
                         pages.append(page.extract_text() or "")
                     except Exception:
@@ -187,103 +187,11 @@ def fetch_open_access_full_text(url: str, max_chars: int = 60000) -> str:
         return f"Unexpected error fetching full text: {e}"
 
 
-# Add DFT-specific tools
-@tool
-def verify_job_submission(thread_id: str) -> str:
-    """Verify if any jobs were actually submitted for a given thread.
-    
-    Args:
-        thread_id: Thread ID to check for submitted jobs
-        
-    Returns:
-        Information about submitted jobs or confirmation that none were submitted
-    """
-    try:
-        from backend.utils.workspace import get_subdir_path
-        
-        workspace_dir = get_subdir_path(thread_id, "calculations/jobs")
-        
-        if not workspace_dir.exists():
-            return f"No jobs directory found for thread {thread_id}. No jobs were submitted."
-        
-        # Find all job info files
-        job_files = list(workspace_dir.glob("job_*.json"))
-        
-        if not job_files:
-            return f"No job files found in {workspace_dir}. No jobs were submitted."
-        
-        results = f"Found {len(job_files)} submitted jobs for thread {thread_id}:\n"
-        
-        for job_file in job_files:
-            try:
-                import json
-                with open(job_file, "r") as f:
-                    job_info = json.load(f)
-                
-                job_id = job_info.get("job_id", "Unknown")
-                status = job_info.get("status", "Unknown")
-                submitted_at = job_info.get("submitted_at", "Unknown")
-                
-                results += f"• Job ID: {job_id}, Status: {status}, Submitted: {submitted_at}\n"
-                
-            except Exception as e:
-                results += f"• Error reading job file {job_file}: {e}\n"
-        
-        return results
-        
-    except Exception as e:
-        return f"Error verifying job submission: {str(e)}"
-
-@tool
-def get_agent_capabilities() -> str:
-    """Get information about available agents and their capabilities.
-    
-    Returns:
-        Detailed information about all available agents and their tools
-    """
-    try:
-        from backend.agents.agent_manager import get_all_agent_info
-        
-        agent_info = get_all_agent_info()
-        
-        capabilities = "🤖 **Available Agents and Capabilities:**\n\n"
-        
-        for agent in agent_info:
-            capabilities += f"**{agent.key.upper()} AGENT**\n"
-            capabilities += f"Description: {agent.description}\n\n"
-            
-            if agent.key == "chatbot":
-                capabilities += "**Direct Tools Available:**\n"
-                capabilities += "• Structure Generation: generate_bulk, generate_slab\n"
-                capabilities += "• QE Input Creation: generate_qe_input\n"
-                capabilities += "• SLURM Management: generate_slurm_script, submit_slurm_job, check_slurm_job_status\n"
-                capabilities += "• Materials Database: search_materials_project, analyze_crystal_structure\n"
-                capabilities += "• Parameter Recommendations: get_parameter_recommendations\n"
-                capabilities += "• Web Search: web_search\n"
-                capabilities += "• Scientific Literature: search_papers_by_relevance, fetch_open_access_full_text\n"
-                capabilities += "• Calculations: calculator, python_repl\n\n"
-        
-        capabilities += "**Workflow Capabilities:**\n"
-        capabilities += "1. Generate crystal structures (bulk, slabs, surfaces)\n"
-        capabilities += "2. Create Quantum ESPRESSO input files with optimal parameters\n"
-        capabilities += "3. Generate and submit SLURM job scripts\n"
-        capabilities += "4. Monitor job progress and retrieve results\n"
-        capabilities += "5. Search Materials Project database for properties\n"
-        capabilities += "6. Provide parameter recommendations for calculations\n"
-        capabilities += "7. Handle error recovery and validation\n"
-        
-        return capabilities
-        
-    except Exception as e:
-        return f"Error getting agent capabilities: {str(e)}"
-
 base_tools = [
     web_search,
     calculator,
     python_repl,
     fetch_open_access_full_text,
-    get_agent_capabilities,
-    verify_job_submission,
     # Add key DFT tools directly
     TOOL_REGISTRY["generate_bulk"],
     TOOL_REGISTRY["generate_slab"],
@@ -294,7 +202,7 @@ base_tools = [
     TOOL_REGISTRY["search_materials_project"],
     TOOL_REGISTRY["analyze_crystal_structure"],
     TOOL_REGISTRY["find_pseudopotentials"],
-    TOOL_REGISTRY["get_pseudopotential_recommendations"],
+    TOOL_REGISTRY["verify_job_submission"],
 ]
 
 # Global variable to cache loaded tools
@@ -345,7 +253,7 @@ Path(images_dir).mkdir(parents=True, exist_ok=True)
 datasets_dir = f"{settings.ROOT_PATH}/data/raw_data"
 
 instructions = f"""
-    You are the DFT Agent - a comprehensive assistant for Density Functional Theory (DFT) calculations and materials science workflows.
+    You are an research assistant for Density Functional Theory (DFT) calculations and materials science workflows.
     You help users with structure generation, Quantum ESPRESSO input creation, SLURM job management, and scientific analysis.
     Today's date is {current_date}.
 
@@ -364,8 +272,8 @@ instructions = f"""
     4. **Materials Database**: Search Materials Project for properties and validation
     5. **Parameter Recommendations**: Suggest optimal computational parameters
     6. **Scientific Literature**: Search and analyze research papers
-    7. **Data Analysis**: Analyze adsorption energy datasets and compare with calculations
-    8. **Error Handling**: Validate calculations and provide troubleshooting
+    7. **Error Handling**: Validate calculations and provide troubleshooting
+    8. **Data Analysis**: Analyze adsorption energy datasets, use Python for data analysis, post-processing and visualization
 
     **WORKFLOW GUIDANCE:**
     - Always start by understanding what the user wants to calculate
@@ -375,7 +283,6 @@ instructions = f"""
     - Provide monitoring instructions and job status checking
     - Validate calculations against known properties when possible
     - For adsorption studies, reference the available datasets in {datasets_dir}/README.md for benchmarking and parameter validation
-    
     **CRITICAL: ALWAYS USE TOOLS DIRECTLY**
     - When user asks for structure generation, immediately call generate_slab() or generate_bulk()
     - When user asks for QE input, immediately call generate_qe_input()
@@ -404,7 +311,6 @@ instructions = f"""
     - Use web_search() for current information
     - Use calculator and python_repl for analysis and dataset processing
     - For adsorption energy analysis, read {datasets_dir}/README.md first to understand available data schemas
-    
     **LITERATURE WORKFLOW:**
     - When user asks for literature-based parameters, ALWAYS use MCP Paper Miner tools first
     - Use search_papers_by_relevance() to find relevant papers
@@ -454,22 +360,16 @@ async def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, A
 async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
     try:
         model_name = config["configurable"].get("model", settings.DEFAULT_MODEL)
-        print(f"🔧 DFT Agent using model: {model_name}")
-        
         m = get_model(model_name)
         model_runnable = await wrap_model(m)
-        
-        print(f"📝 Processing {len(state['messages'])} messages")
         response = await model_runnable.ainvoke(state, config)
-        
-        print(f"✅ DFT Agent response generated successfully")
         return {"messages": [response]}
-        
+
     except Exception as e:
-        print(f"❌ DFT Agent error: {str(e)}")
         # Return an error message
-        from langchain_core.messages import AIMessage
-        error_msg = AIMessage(content=f"I encountered an error: {str(e)}. Please try again or check the system configuration.")
+        error_msg = AIMessage(
+            content=f"I encountered an error: {str(e)}. Please try again or check the system configuration."
+        )
         return {"messages": [error_msg]}
 
 

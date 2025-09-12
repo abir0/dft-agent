@@ -31,6 +31,7 @@ __pycache__/
 # VS Code
 .vscode
 .DS_Store
+.editorconfig
 
 # C extensions
 *.so
@@ -203,7 +204,8 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-# LangGraph
+# Others
 .langgraph_api/
 .uv
 .uv.backup
+*.pid

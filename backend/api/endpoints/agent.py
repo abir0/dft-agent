@@ -234,7 +234,7 @@ async def history(input: ChatHistoryInput) -> ChatHistory:
         # Handle case where no messages exist yet
         if not state_snapshot.values or "messages" not in state_snapshot.values:
             return ChatHistory(messages=[])
-        
+
         messages: list[AnyMessage] = state_snapshot.values["messages"]
         chat_messages: list[ChatMessage] = [
             langchain_to_chat_message(m) for m in messages
