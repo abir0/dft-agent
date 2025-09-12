@@ -11,10 +11,28 @@ fi
 source .venv/bin/activate
 export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 
-backend_running() { ss -tulpn 2>/dev/null | grep -q ':8083'; }
-frontend_running() { ss -tulpn 2>/dev/null | grep -q ':8501'; }
+# Function to check if port is in use (cross-platform)
+check_port() {
+    local port=$1
+    if command -v lsof >/dev/null 2>&1; then
+        # macOS and most Unix systems
+        lsof -i :$port >/dev/null 2>&1
+    elif command -v ss >/dev/null 2>&1; then
+        # Linux systems with iproute2
+        ss -tulpn | grep -q ":$port"
+    elif command -v netstat >/dev/null 2>&1; then
+        # Fallback to netstat
+        netstat -an | grep -q ":$port"
+    else
+        # No port checking available
+        return 1
+    fi
+}
 
-if backend_running; then
+# Create logs directory if it doesn't exist
+mkdir -p logs
+
+if check_port 8083; then
     echo "backend already running (8083)"
 else
     nohup uvicorn backend.api.main:app --host 0.0.0.0 --port 8083 --reload > logs/service.log 2>&1 &
@@ -22,7 +40,7 @@ else
     echo "backend started pid $(cat .backend.pid)"
 fi
 
-if frontend_running; then
+if check_port 8501; then
     echo "frontend already running (8501)"
 else
     nohup streamlit run frontend/app.py > logs/app.log 2>&1 &
