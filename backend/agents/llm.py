@@ -44,7 +44,11 @@ def get_model(model_name: AllModelEnum, /) -> ModelT:
 
     if model_name in OpenAIModelName:
         # GPT-5 models only support default temperature (1.0)
-        temp = 1.0 if model_name in (OpenAIModelName.GPT_5, OpenAIModelName.GPT_5_MINI) else 0.5
+        temp = (
+            1.0
+            if model_name in (OpenAIModelName.GPT_5, OpenAIModelName.GPT_5_MINI)
+            else 0.3
+        )
         return ChatOpenAI(
             model=api_model_name,
             temperature=temp,
