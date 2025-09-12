@@ -202,7 +202,8 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-# LangGraph
+# Others
 .langgraph_api/
 .uv
 .uv.backup
+*.pid
