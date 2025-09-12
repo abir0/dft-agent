@@ -33,11 +33,21 @@ def _create_dft_agent():
     return dft_agent
 
 
+def _create_unified_agent():
+    from backend.agents.library.unified_agent import unified_agent
+
+    return unified_agent
+
+
 agent_configs: dict[str, AgentConfig] = {
     "chatbot": AgentConfig(description="A simple chatbot", factory=_create_chatbot),
     "dft_agent": AgentConfig(
         description="Expert DFT agent for computational materials science workflows",
         factory=_create_dft_agent,
+    ),
+    "unified_agent": AgentConfig(
+        description="Unified agent combining general and computational capabilities with intelligent planning",
+        factory=_create_unified_agent,
     ),
 }
 
