@@ -26,10 +26,7 @@ from langgraph.prebuilt import tools_condition
 from backend.agents.library.dft_agent.tool_registry import TOOL_REGISTRY
 from backend.agents.llm import get_model, settings
 from backend.agents.tools import python_repl
-from backend.utils.workspace import (
-    async_get_workspace_path,
-    extract_thread_id_from_config,
-)
+from backend.utils.workspace import async_get_workspace_path
 
 
 class AgentState(MessagesState, total=False):
@@ -72,11 +69,9 @@ class AgentState(MessagesState, total=False):
 dft_tools = [*TOOL_REGISTRY.values(), python_repl]
 
 
-async def initialize_agent_state(
-    config: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+async def initialize_agent_state(config: RunnableConfig) -> Dict[str, Any]:
     """Initialize default DFT agent state with workspace support (non-blocking)."""
-    thread_id = extract_thread_id_from_config(config)
+    thread_id = config.get("configurable", {}).get("thread_id")
     workspace_path = await async_get_workspace_path(thread_id)
 
     return {
@@ -197,8 +192,7 @@ def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, AIMessa
 
 async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
     """Primary DFT agent reasoning / planning node."""
-    if "working_directory" not in state or "thread_id" not in state:
-        state.update(await initialize_agent_state(config))
+    state.update(await initialize_agent_state(config))
 
     m = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
     model_runnable = wrap_model(m)
@@ -232,6 +226,9 @@ def handle_tool_error(state) -> dict:
 async def custom_tool_node(state: AgentState, config: RunnableConfig) -> AgentState:
     """Execute tool calls asynchronously with thread/workspace injection and error capture."""
     thread_id = state.get("thread_id")
+    if not thread_id:
+        thread_id = config.get("configurable", {}).get("thread_id")
+        state["thread_id"] = thread_id
 
     messages = state["messages"]
     last_message = messages[-1]
@@ -247,7 +244,6 @@ async def custom_tool_node(state: AgentState, config: RunnableConfig) -> AgentSt
         if (
             thread_id
             and "_thread_id" in tool_func.__annotations__
-            and "_thread_id" not in tool_args
         ):
             # Inject implicit workspace context
             tool_args["_thread_id"] = thread_id
@@ -301,7 +297,7 @@ workflow.add_node("dft", acall_model)
 workflow.add_node("tools", create_tool_node_with_fallback(dft_tools))
 
 workflow.set_entry_point("dft")
-workflow.add_conditional_edges("dft", tools_condition)
+workflow.add_conditional_edges("dft", tools_condition, ["tools", END])
 workflow.add_edge("tools", "dft")
 workflow.add_edge("dft", END)
 
