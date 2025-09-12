@@ -11,13 +11,21 @@ fi
 source .venv/bin/activate
 export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 
-backend_running() { ss -tulpn 2>/dev/null | grep -q ':8083'; }
+# Load environment variables
+set -a
+source .env 2>/dev/null || true
+set +a
+
+PORT=${PORT:-8083}
+HOST=${HOST:-0.0.0.0}
+
+backend_running() { ss -tulpn 2>/dev/null | grep -q ":$PORT"; }
 frontend_running() { ss -tulpn 2>/dev/null | grep -q ':8501'; }
 
 if backend_running; then
-    echo "backend already running (8083)"
+    echo "backend already running ($PORT)"
 else
-    nohup uvicorn backend.api.main:app --host 0.0.0.0 --port 8083 --reload > logs/service.log 2>&1 &
+    nohup uvicorn backend.api.main:app --host $HOST --port $PORT --reload > logs/service.log 2>&1 &
     echo $! > .backend.pid
     echo "backend started pid $(cat .backend.pid)"
 fi
@@ -30,4 +38,4 @@ else
     echo "frontend started pid $(cat .frontend.pid)"
 fi
 
-echo "services running: api http://localhost:8083  ui http://localhost:8501"
+echo "services running: api http://localhost:$PORT  ui http://localhost:8501"

@@ -1,6 +1,13 @@
 #!/bin/bash
-# Minimal stop script: terminates backend (8083) and frontend (8501) processes.
+# Minimal stop script: terminates backend and frontend processes.
 set -e
+
+# Load environment variables
+set -a
+source .env 2>/dev/null || true
+set +a
+
+PORT=${PORT:-8083}
 
 kill_pid_file() {
     local f="$1"
@@ -30,7 +37,7 @@ stop_port() {
 kill_pid_file .backend.pid
 kill_pid_file .frontend.pid
 
-stop_port 8083 backend
+stop_port $PORT backend
 stop_port 8501 frontend
 
 pkill -f 'uvicorn backend.api.main:app' 2>/dev/null || true
