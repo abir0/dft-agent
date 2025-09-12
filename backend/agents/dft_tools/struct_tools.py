@@ -10,9 +10,11 @@ from pymatgen.io.vasp import Poscar, Xdatcar
 from pymatgen.io.cif import CifParser
 from pymatgen.core import Molecule
 from pymatgen.ext.matproj import MPRester
-from ase.build import add_adsorbate
+#from ase.build import add_adsorbate, find_adsorption_sites
+from pymatgen.analysis.adsorption import AdsorbateSiteFinder
 from ase import Atoms
 import json, base64, io
+import numpy as np
 
 # ---------- helpers
 def _to_pm(atoms: Atoms) -> Structure:
@@ -82,7 +84,7 @@ def build_structure(
     if source == "file":
         txt = _read_text_or_b64(file_content)
         if file_format == "cif":
-            s = CifParser.from_string(txt).get_structures(primitive=False)[0]
+            s = CifParser.from_str(txt).get_structures(primitive=False)[0]
         else:
             s = Structure.from_str(txt, fmt="poscar")
     elif source == "spacegroup":
@@ -126,6 +128,12 @@ def make_slab(struct_json: str, miller: Tuple[int,int,int], min_slab: float=12.0
     slab = sg.get_slabs(bonds=None, max_broken_bonds=0)[0]
     return json.dumps(slab.as_dict())
 
+def _build_adsorbate(ads: str, orientation: str) -> Molecule:
+    if ads == "CO":
+        # anchor is first atom (placed closest to surface)
+        return Molecule(["O","C"], [[0,0,0],[1.15,0,0]]) if orientation == "O-down" \
+               else Molecule(["C","O"], [[0,0,0],[1.15,0,0]])
+    return Molecule.from_formula(ads)
 @tool
 def place_adsorbate_on_slab(slab_json: str, ads: Literal["CO","O","H","N2"], site: Literal["ontop","bridge","fcc","hcp"], height: float=1.8, orientation: Literal["C-down","O-down","flat"]="C-down") -> str:
     """
@@ -133,17 +141,34 @@ def place_adsorbate_on_slab(slab_json: str, ads: Literal["CO","O","H","N2"], sit
     Returned as Structure JSON for downstream writers.
     """
     slab = Structure.from_dict(json.loads(slab_json))
-    ase_slab = _to_ase(slab)
+    asf = AdsorbateSiteFinder(slab)
     # build small molecules
     mol = Molecule.from_formula(ads) if ads not in ("CO",) else Molecule(["C","O"], [[0,0,0],[1.15,0,0]])
     ase_mol = Atoms(symbols=[sp.symbol for sp in mol.species], positions=mol.cart_coords)
-    # orientation (very simple)
-    if orientation == "O-down" and ads=="CO":
-        ase_mol = Atoms(symbols=["O","C"], positions=[[0,0,0],[1.15,0,0]])
-    # site mapping: ASE add_adsorbate accepts 'fcc','hcp','bridge' or (x,y)
-    add_adsorbate(ase_slab, ase_mol, height, position=site if site in ("fcc","hcp","bridge") else site)
-    ase_slab.center(vacuum=ase_slab.cell.lengths()[2])  # keep vacuum
-    return json.dumps(_to_pm(ase_slab).as_dict())
+    site_key = "hollow" if site in ("fcc", "hcp") else site
+    sites = asf.find_adsorption_sites()
+    candidates = sites.get(site_key, [])
+    if not candidates:
+        # graceful fallback order
+        for fb in ("ontop", "bridge", "hollow"):
+            if sites.get(fb):
+                candidates = sites[fb];
+                break
+    if not candidates:
+        raise ValueError("No adsorption sites found on this slab.")
+
+    # Target coordinate (cartesian): site + height along z
+    base = np.array(candidates[0], dtype=float)
+    target = base + np.array([0.0, 0.0, float(height)], dtype=float)
+
+    # Build molecule and pre-translate so anchor atom is at (0,0,0)
+    mol = _build_adsorbate(ads, orientation).copy()
+    anchor = np.array(mol.cart_coords[0], dtype=float)
+    mol.translate_sites(range(len(mol)), -anchor)  # shift all so atom 0 is at origin
+
+    # Correct call: molecule first; pass translate=False so we keep our shift
+    placed = asf.add_adsorbate(mol, target, translate=False, reorient=False)
+    return json.dumps(placed.as_dict())
 
 @tool
 def set_initial_magnetism(struct_json: str, moments: Dict[str,float]) -> str:

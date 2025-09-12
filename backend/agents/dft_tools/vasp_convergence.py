@@ -7,7 +7,7 @@ from langchain_core.tools import tool
 # Reuse your existing tools
 from backend.agents.dft_tools.pmg_vasp import write_vasp_scf, parse_vasp_energy
 from backend.agents.dft_tools.pmg_run import run_local
-from utils import _norm_kpts, _mev
+from .utils import _norm_kpts, _mev
 
 @dataclass
 class ConvergenceResult:
