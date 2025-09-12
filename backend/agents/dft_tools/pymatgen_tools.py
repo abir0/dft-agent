@@ -5,16 +5,33 @@ Tools for materials database integration, crystal analysis, and electronic struc
 analysis using Pymatgen and Materials Project API.
 """
 
+import gzip
 import json
+import shutil
+import tarfile
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import requests
 from ase.io import read
 from langchain_core.tools import tool
 from mp_api.client import MPRester
 from pymatgen.analysis.local_env import CrystalNN
 from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+
+from backend.settings import settings
+
+headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+}
+
+
+# Load parsed pseudopotential data
+with open("data/pseudos_metadata.json", "r", encoding="utf-8") as f:
+    PP_METADATA = json.load(f)
 
 
 @tool
@@ -218,105 +235,93 @@ def analyze_crystal_structure(
 @tool
 def find_pseudopotentials(
     elements: List[str],
-    pp_type: str = "paw",
-    pp_library: str = "psl",
-    functional: str = "pbe",
-) -> str:
-    """Find and validate pseudopotentials for elements using pslibrary database.
+    pp_type: str = "PAW",
+    pp_library: str = "pslibrary",
+    functional: str = "PBE",
+) -> dict:
+    """Find, download, and extract pseudopotentials from parsed JSON.
 
     Args:
-        elements: List of chemical elements
-        pp_type: Pseudopotential type ('paw', 'nc', 'us')
-        pp_library: Pseudopotential library ('psl', 'gbrv', 'sg15')
-        functional: Exchange-correlation functional ('pbe', 'lda', 'pbesol')
+        elements: List of chemical elements (symbols, e.g. ["Si", "O"])
+        pp_type: Pseudopotential type ("PAW", "US", "ONCV")
+        pp_library: Pseudopotential library ("pslibrary", "gbrv", "sg15", "dojo", "SSSP_Efficiency")
+        functional: Exchange-correlation functional ("PBE", "LDA", "PBEsol", "PW91")
 
     Returns:
-        Information about available pseudopotentials
+        dict with working_dir and found pseudopotentials (local paths)
     """
     try:
-        # Load pslibrary database
-        pp_db_path = Path("data/inputs/pseudopotentials/pslibrary_database.json")
-        if not pp_db_path.exists():
-            return "Error: pslibrary database not found. Please ensure the database is created."
-        
-        with open(pp_db_path, 'r') as f:
-            pp_database = json.load(f)
-        
-        # Find pseudopotentials for requested elements
+        output_dir = Path(f"{settings.ROOT_PATH}/WORKSPACE/pseudos")
+        output_dir.mkdir(exist_ok=True)
+
         found_pps = {}
         missing_pps = []
-        pp_details = {}
-        
-        for element in elements:
-            element = element.capitalize()
-            
-            if element in pp_database['pseudopotentials']:
-                element_pps = pp_database['pseudopotentials'][element]['available_pseudopotentials']
-                
-                # Find matching pseudopotential
-                matching_pp = None
-                for pp in element_pps:
-                    if (pp['functional'] == functional and 
-                        pp['type'].lower() == pp_type.lower() and
-                        pp['recommended']):
-                        matching_pp = pp
-                        break
-                
-                if matching_pp:
-                    found_pps[element] = matching_pp['filename']
-                    pp_details[element] = {
-                        'filename': matching_pp['filename'],
-                        'type': matching_pp['type'],
-                        'functional': matching_pp['functional'],
-                        'quality': matching_pp['quality'],
-                        'relativistic': matching_pp['relativistic'],
-                        'cutoff_energy': matching_pp['cutoff_energy'],
-                        'description': matching_pp['description']
-                    }
+
+        for elem in elements:
+            # Search parsed JSON
+            match = None
+            for entry in PP_METADATA:
+                if (
+                    entry.get("element", "").capitalize() == elem.capitalize()
+                    and entry.get("pp_type", "").lower() == pp_type.lower()
+                    and entry.get("generator", "").lower() == pp_library.lower()
+                    and entry.get("xc", "").lower() == functional.lower()
+                ):
+                    match = entry
+                    break
+
+            if not match or not match.get("download_url"):
+                missing_pps.append(elem)
+                continue
+
+            url = match["download_url"]
+            local_file = output_dir / Path(url).name
+
+            # Download the pseudopotential if not already present
+            if not local_file.exists():
+                response = requests.get(url, headers=headers)
+                if response.status_code == 200:
+                    with open(local_file, "w") as f:
+                        f.write(response.text)
                 else:
-                    missing_pps.append(element)
-            else:
-                missing_pps.append(element)
-        
-        # Create output directory and save PP mapping
-        output_dir = Path("data/outputs/pseudopotentials")
-        output_dir.mkdir(parents=True, exist_ok=True)
-        
-        pp_data = {
-            "elements": elements,
-            "pp_type": pp_type,
-            "pp_library": pp_library,
-            "functional": functional,
-            "pseudopotentials": found_pps,
-            "pseudopotential_details": pp_details,
-            "missing_elements": missing_pps,
-            "source": "pslibrary",
-            "notes": "Pseudopotentials from pslibrary database"
+                    missing_pps.append(elem)
+                    continue
+
+            # Extract if compressed
+            final_file = local_file
+            if local_file.suffix == ".gz":
+                extracted_file = output_dir / local_file.stem
+                with (
+                    gzip.open(local_file, "rb") as f_in,
+                    open(extracted_file, "wb") as f_out,
+                ):
+                    shutil.copyfileobj(f_in, f_out)
+                final_file = extracted_file
+
+            elif local_file.suffixes[-2:] in [
+                [".tar", ".gz"],
+                [".tar", ".bz2"],
+                [".tar", ".xz"],
+            ]:
+                with tarfile.open(local_file, "r:*") as tar:
+                    tar.extractall(output_dir)
+                # pick extracted UPFs
+                extracted_files = list(output_dir.glob("*.UPF")) + list(
+                    output_dir.glob("*.upf")
+                )
+                if extracted_files:
+                    final_file = extracted_files[0]
+
+            found_pps[elem] = str(final_file)
+
+        return {
+            "working_dir": str(output_dir.resolve()),
+            "found_pseudopotentials": found_pps,
+            "missing": missing_pps,
         }
-        
-        pp_file = output_dir / f"pp_mapping_{functional}_{pp_library}.json"
-        with open(pp_file, "w") as f:
-            json.dump(pp_data, f, indent=2)
-        
-        summary = f"Found pseudopotentials for {len(found_pps)} elements:\n"
-        for element, pp_file in found_pps.items():
-            details = pp_details[element]
-            summary += f"  {element}: {pp_file}\n"
-            summary += f"    Type: {details['type']}, Quality: {details['quality']}\n"
-            summary += f"    Cutoff: {details['cutoff_energy']['ecutwfc']} Ry\n"
-            if details['relativistic']:
-                summary += f"    Relativistic: Yes\n"
-            summary += "\n"
-        
-        summary += f"Mapping saved to: {pp_file}"
-        
-        if missing_pps:
-            summary += f"\n\nMissing pseudopotentials for: {', '.join(missing_pps)}"
-        
-        return summary
-        
+
     except Exception as e:
-        return f"Error finding pseudopotentials: {str(e)}"
+        return {"error": str(e)}
 
 
 @tool

@@ -165,6 +165,7 @@ ERROR RECOVERY:
  - If a tool error occurs: analyze likely cause, adjust parameters, retry (<=3 total attempts per failing logical step).
  - Use error_handler tool if cause unclear after first failure.
  - After exhausting retries: report failure reason + suggested manual fix.
+ - If DFT calculation fails check the CRASH file first for clues. (use python_repl to read/extract if needed).
 
 STYLE & CONSTRAINTS:
  - Do NOT expose raw tool JSON directly; interpret scientifically.
