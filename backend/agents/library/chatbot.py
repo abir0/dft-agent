@@ -21,12 +21,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from backend.agents.asta_mcp_client import get_specific_asta_tools
 from backend.agents.llm import get_model, settings
 from backend.agents.tools import calculator, python_repl
-from backend.agents.dft_tools import (
-    search_materials_project,
-    analyze_crystal_structure,
-    calculate_formation_energy,
-    find_pseudopotentials,
-)
+from backend.agents.dft_tools.tool_registry import TOOL_REGISTRY
 
 
 class AgentState(MessagesState, total=False):
@@ -192,16 +187,114 @@ def fetch_open_access_full_text(url: str, max_chars: int = 60000) -> str:
         return f"Unexpected error fetching full text: {e}"
 
 
+# Add DFT-specific tools
+@tool
+def verify_job_submission(thread_id: str) -> str:
+    """Verify if any jobs were actually submitted for a given thread.
+    
+    Args:
+        thread_id: Thread ID to check for submitted jobs
+        
+    Returns:
+        Information about submitted jobs or confirmation that none were submitted
+    """
+    try:
+        from backend.utils.workspace import get_subdir_path
+        
+        workspace_dir = get_subdir_path(thread_id, "calculations/jobs")
+        
+        if not workspace_dir.exists():
+            return f"No jobs directory found for thread {thread_id}. No jobs were submitted."
+        
+        # Find all job info files
+        job_files = list(workspace_dir.glob("job_*.json"))
+        
+        if not job_files:
+            return f"No job files found in {workspace_dir}. No jobs were submitted."
+        
+        results = f"Found {len(job_files)} submitted jobs for thread {thread_id}:\n"
+        
+        for job_file in job_files:
+            try:
+                import json
+                with open(job_file, "r") as f:
+                    job_info = json.load(f)
+                
+                job_id = job_info.get("job_id", "Unknown")
+                status = job_info.get("status", "Unknown")
+                submitted_at = job_info.get("submitted_at", "Unknown")
+                
+                results += f"• Job ID: {job_id}, Status: {status}, Submitted: {submitted_at}\n"
+                
+            except Exception as e:
+                results += f"• Error reading job file {job_file}: {e}\n"
+        
+        return results
+        
+    except Exception as e:
+        return f"Error verifying job submission: {str(e)}"
+
+@tool
+def get_agent_capabilities() -> str:
+    """Get information about available agents and their capabilities.
+    
+    Returns:
+        Detailed information about all available agents and their tools
+    """
+    try:
+        from backend.agents.agent_manager import get_all_agent_info
+        
+        agent_info = get_all_agent_info()
+        
+        capabilities = "🤖 **Available Agents and Capabilities:**\n\n"
+        
+        for agent in agent_info:
+            capabilities += f"**{agent.key.upper()} AGENT**\n"
+            capabilities += f"Description: {agent.description}\n\n"
+            
+            if agent.key == "chatbot":
+                capabilities += "**Direct Tools Available:**\n"
+                capabilities += "• Structure Generation: generate_bulk, generate_slab\n"
+                capabilities += "• QE Input Creation: generate_qe_input\n"
+                capabilities += "• SLURM Management: generate_slurm_script, submit_slurm_job, check_slurm_job_status\n"
+                capabilities += "• Materials Database: search_materials_project, analyze_crystal_structure\n"
+                capabilities += "• Parameter Recommendations: get_parameter_recommendations\n"
+                capabilities += "• Web Search: web_search\n"
+                capabilities += "• Scientific Literature: search_papers_by_relevance, fetch_open_access_full_text\n"
+                capabilities += "• Calculations: calculator, python_repl\n\n"
+        
+        capabilities += "**Workflow Capabilities:**\n"
+        capabilities += "1. Generate crystal structures (bulk, slabs, surfaces)\n"
+        capabilities += "2. Create Quantum ESPRESSO input files with optimal parameters\n"
+        capabilities += "3. Generate and submit SLURM job scripts\n"
+        capabilities += "4. Monitor job progress and retrieve results\n"
+        capabilities += "5. Search Materials Project database for properties\n"
+        capabilities += "6. Provide parameter recommendations for calculations\n"
+        capabilities += "7. Handle error recovery and validation\n"
+        
+        return capabilities
+        
+    except Exception as e:
+        return f"Error getting agent capabilities: {str(e)}"
+
 base_tools = [
     web_search,
     calculator,
     python_repl,
     fetch_open_access_full_text,
-    # Materials Project / Pymatgen tools (shared with DFT agent)
-    search_materials_project,
-    analyze_crystal_structure,
-    calculate_formation_energy,
-    find_pseudopotentials,
+    get_agent_capabilities,
+    verify_job_submission,
+    # Add key DFT tools directly
+    TOOL_REGISTRY["generate_bulk"],
+    TOOL_REGISTRY["generate_slab"],
+    TOOL_REGISTRY["generate_qe_input"],
+    TOOL_REGISTRY["generate_slurm_script"],
+    TOOL_REGISTRY["submit_slurm_job"],
+    TOOL_REGISTRY["check_slurm_job_status"],
+    TOOL_REGISTRY["search_materials_project"],
+    TOOL_REGISTRY["analyze_crystal_structure"],
+    TOOL_REGISTRY["find_pseudopotentials"],
+    TOOL_REGISTRY["get_pseudopotential_recommendations"],
 ]
 
 # Global variable to cache loaded tools
@@ -252,44 +345,88 @@ Path(images_dir).mkdir(parents=True, exist_ok=True)
 datasets_dir = f"{settings.ROOT_PATH}/data/raw_data"
 
 instructions = f"""
-    You are a helpful chat assistant with expertise in materials science and DFT calculations,
-    with the ability to search the web, search scientific literature, and use other tools.
+    You are the DFT Agent - a comprehensive assistant for Density Functional Theory (DFT) calculations and materials science workflows.
+    You help users with structure generation, Quantum ESPRESSO input creation, SLURM job management, and scientific analysis.
     Today's date is {current_date}.
 
-    NOTE: THE USER CAN'T SEE THE TOOL RESPONSE.
+    **YOUR CORE CAPABILITIES:**
+    1. **Structure Generation**: Create bulk crystals and surface slabs using pymatgen
+    2. **QE Input Creation**: Generate optimized Quantum ESPRESSO input files with proper parameters
+    3. **SLURM Job Management**: Create, submit, and monitor HPC job scripts
+    4. **Materials Database**: Search Materials Project for properties and validation
+    5. **Parameter Recommendations**: Suggest optimal computational parameters
+    6. **Scientific Literature**: Search and analyze research papers
+    7. **Error Handling**: Validate calculations and provide troubleshooting
 
-    A few things to remember:
-    - When searching, be persistent. Expand your query bounds if the first search returns no results.
-    - If a search comes up empty, expand your search before giving up.
-    - Use the search_papers_by_relevance tool to find peer-reviewed scientific literature by keyword.
-    - Use the search_paper_by_title tool to find specific papers by their title.
-    - Use the get_papers tool to get detailed information about specific papers using their ID.
-    - Use the get_citations tool to find papers that cite a specific paper.
-    - When a paper result indicates isOpenAccess=true and provides a URL, use the
-      fetch_open_access_full_text tool to retrieve the article's full text for analysis.
-    - Use the search_authors_by_name and get_author_papers tools to find papers by specific researchers.
-    - If Asta scientific paper search tools return 403 Forbidden errors, inform the user that there may be an API key permission issue and suggest using web search instead.
+    **WORKFLOW GUIDANCE:**
+    - Always start by understanding what the user wants to calculate
+    - For new users, use get_agent_capabilities() to show available tools
+    - Generate structures first, then create QE inputs, then SLURM scripts
+    - ALWAYS submit the job after creating the script (use submit_slurm_job)
+    - Provide monitoring instructions and job status checking
+    - Validate calculations against known properties when possible
     
-    Materials Project / Pymatgen tools (use when applicable):
-    - search_materials_project: Use to retrieve candidate materials, properties, and CIFs from Materials Project given a formula (e.g., "TiO2", "LiFePO4"). Prefer this over web search when you need authoritative structures/properties. Reads MP_API_KEY from environment if not passed.
-    - analyze_crystal_structure: Use on a provided structure file (e.g., CIF/POSCAR/XYZ) to get crystal system, space group, lattice parameters, conventional cell, and coordination; then reference the saved analysis artifacts.
-    - find_pseudopotentials: Use to propose pseudopotential filenames for a set of elements (PSL PBE by default). Include a brief note to verify availability in the user’s PP directory.
-    - calculate_formation_energy: Use when the user provides a structure and a computed total energy plus element reference energies to report formation energy (total and per atom).
-    - Please include markdown-formatted links to any citations used in your response. Only include one
-    or two citations per response unless more are needed. ONLY USE LINKS RETURNED BY THE TOOLS.
-    - Use calculator tool with numexpr to answer math questions. The user does not understand numexpr,
-      so for the final response, use human readable format or markdown format.
-    - Use Python REPL tool for data analysis and visualization tasks.
-    - If Python REPL shows error fix the error in code and run again, if you are failing more than 3 times give up.
-    - For data processing and analysis, use pandas library.
-    - Local datasets are available at: {datasets_dir}
-    - Load datasets with absolute paths via pandas, e.g., `import pandas as pd; from pathlib import Path; df = pd.read_csv(Path("{datasets_dir}") / "file.csv")`. Prefer read-only access; do not move or rename source files.
-    - For charts generation, use seaborn or matplotlib.
-    - ALWAYS save the plots/charts into the following folder: {images_dir}
-    - Only include markdown-formatted links to citations used in your response. Only include one
-    or two citations per response unless more are needed. ONLY USE LINKS RETURNED BY THE TOOLS.
-    - When displaying image to the user, use html <img> tag, instead of markdown.
-    ALWAYS USE IMG TAG FOR LINKING IMAGES.
+    **CRITICAL: ALWAYS USE TOOLS DIRECTLY**
+    - When user asks for structure generation, immediately call generate_slab() or generate_bulk()
+    - When user asks for QE input, immediately call generate_qe_input()
+    - When user asks for SLURM script, immediately call generate_slurm_script()
+    - When user asks to submit job, immediately call submit_slurm_job()
+    - When user asks to check job status, immediately call check_slurm_job_status()
+    - DO NOT ask for more information - use reasonable defaults and call the tools
+
+    **IMPORTANT RULES:**
+    - When creating SLURM scripts, ALWAYS follow up with job submission using submit_slurm_job()
+    - NEVER claim a job was submitted without actually calling submit_slurm_job()
+    - Always verify job submission by checking the returned job ID
+    - Search Materials Project for validation and reference data
+    - Provide clear step-by-step instructions for monitoring jobs
+    - Handle errors gracefully and suggest solutions
+    - Use thread_id parameter for workspace organization
+    - If job submission fails, report the actual error message
+
+    **TOOL USAGE:**
+    - Use search_materials_project() to find material properties
+    - Use MCP Paper Miner tools (search_papers_by_relevance, get_papers, get_citations) for literature search
+    - Use generate_slab() for surface calculations (e.g., Pt(111))
+    - Use generate_qe_input() with proper parameters for calculations
+    - Use generate_slurm_script() followed by submit_slurm_job()
+    - Use check_slurm_job_status() for monitoring
+    - Use web_search() for current information
+    - Use calculator and python_repl for analysis
+    
+    **LITERATURE WORKFLOW:**
+    - When user asks for literature-based parameters, ALWAYS use MCP Paper Miner tools first
+    - Use search_papers_by_relevance() to find relevant papers
+    - Use get_papers() to get detailed paper information
+    - Use get_citations() to get proper citations
+    - Extract specific parameters (cutoffs, k-points, functionals) from paper content
+    - CRITICAL: ALWAYS provide complete paper citations in this EXACT format:
+      * **Title:** [Full Title]
+      * **Authors:** [Author1, Author2, et al.]
+      * **Journal:** [Journal Name, Year, Volume, Pages]
+      * **DOI:** [DOI if available]
+      * **URL:** [Link if available]
+    - For each parameter used, explicitly state: "This parameter was extracted from [Paper Title] by [Authors]"
+    - NEVER use generic parameters without citing specific papers
+    - If you cannot extract specific parameters from papers, clearly state this limitation
+    - Always use get_citations() tool to get proper citation format
+
+    **ERROR HANDLING:**
+    - If tools fail, provide clear error messages and solutions
+    - Validate input parameters before calculations
+    - Check job status and provide troubleshooting steps
+    - If rate limits are hit, break down complex workflows into smaller steps
+    - Always complete at least the first few steps before hitting limits
+    - Suggest alternative approaches when calculations fail
+
+    **RESPONSE FORMAT:**
+    - Be clear and educational for non-experts
+    - Provide step-by-step instructions
+    - Include file paths and job IDs for tracking
+    - Explain what each step accomplishes
+    - Show how to monitor and validate results
+
+    NOTE: THE USER CAN'T SEE THE TOOL RESPONSE DIRECTLY - summarize results clearly.
     """
 
 
@@ -304,12 +441,25 @@ async def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, A
 
 
 async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
-    m = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-    model_runnable = await wrap_model(m)
-    response = await model_runnable.ainvoke(state, config)
-
-    # We return a list, because this will get added to the existing list
-    return {"messages": [response]}
+    try:
+        model_name = config["configurable"].get("model", settings.DEFAULT_MODEL)
+        print(f"🔧 DFT Agent using model: {model_name}")
+        
+        m = get_model(model_name)
+        model_runnable = await wrap_model(m)
+        
+        print(f"📝 Processing {len(state['messages'])} messages")
+        response = await model_runnable.ainvoke(state, config)
+        
+        print(f"✅ DFT Agent response generated successfully")
+        return {"messages": [response]}
+        
+    except Exception as e:
+        print(f"❌ DFT Agent error: {str(e)}")
+        # Return an error message
+        from langchain_core.messages import AIMessage
+        error_msg = AIMessage(content=f"I encountered an error: {str(e)}. Please try again or check the system configuration.")
+        return {"messages": [error_msg]}
 
 
 # Agent functions
@@ -359,6 +509,7 @@ async def create_chatbot_workflow():
 class LazyWorkflow:
     def __init__(self):
         self._workflow = None
+        self.base_tools = base_tools
 
     async def get_workflow(self):
         if self._workflow is None:
@@ -378,6 +529,10 @@ class LazyWorkflow:
         workflow = await self.get_workflow()
         async for event in workflow.astream_events(*args, **kwargs):
             yield event
+
+    async def aget_state(self, *args, **kwargs):
+        workflow = await self.get_workflow()
+        return await workflow.aget_state(*args, **kwargs)
 
     def __getattr__(self, name):
         # For any other methods, delegate to the workflow once it's created

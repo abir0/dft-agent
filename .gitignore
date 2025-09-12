@@ -203,3 +203,5 @@ cython_debug/
 
 # LangGraph
 .langgraph_api/
+.uv
+.uv.backup

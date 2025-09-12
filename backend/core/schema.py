@@ -47,7 +47,7 @@ class UserInput(BaseModel):
     model: SerializeAsAny[AllModelEnum] | None = Field(
         title="Model",
         description="LLM Model to use for the agent.",
-        default=OpenAIModelName.GPT_5,
+        default=OpenAIModelName.GPT_4O,
         examples=[
             OpenAIModelName.GPT_4O_MINI,
             OpenAIModelName.GPT_4O,

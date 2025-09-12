@@ -22,7 +22,6 @@ _MODEL_TABLE = {
     OpenAIModelName.GPT_4O: "gpt-4o",
     OpenAIModelName.GPT_4O_MINI: "gpt-4o-mini",
     OpenAIModelName.GPT_5: "gpt-5",
-    OpenAIModelName.GPT_5_MINI: "gpt-5-mini",
     OllamaModelName.OLLAMA_GENERIC: "ollama",
     GroqModelName.LLAMA_31_8B: "llama-3.1-8b-instant",
     GroqModelName.LLAMA_33_70B: "llama-3.3-70b-versatile",
@@ -43,11 +42,12 @@ def get_model(model_name: AllModelEnum, /) -> ModelT:
         raise ValueError(f"Unsupported model: {model_name}")
 
     if model_name in OpenAIModelName:
-        # GPT-5 models only support default temperature (1.0)
-        temp = 1.0 if model_name in (OpenAIModelName.GPT_5, OpenAIModelName.GPT_5_MINI) else 0.5
+        # Some models don't support custom temperature, use default (1.0) for those
+        models_without_temp_support = ["gpt-5", "gpt-4o-mini"]
+        temperature = None if api_model_name in models_without_temp_support else 0.5
         return ChatOpenAI(
             model=api_model_name,
-            temperature=temp,
+            temperature=temperature,
             streaming=True,
             api_key=settings.OPENAI_API_KEY.get_secret_value()
             if settings.OPENAI_API_KEY

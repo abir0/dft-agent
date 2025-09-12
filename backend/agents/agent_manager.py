@@ -5,7 +5,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from backend.core import AgentInfo
 
-DEFAULT_AGENT = "dft_agent"
+DEFAULT_AGENT = "chatbot"
 
 
 @dataclass
@@ -39,8 +39,20 @@ def _create_unified_agent():
     return unified_agent
 
 
+def _create_slurm_scheduler():
+    from backend.agents.library.slurm_scheduler.agent import slurm_scheduler_agent
+
+    return slurm_scheduler_agent
+
+
+# Supervisor agent removed - functionality consolidated into chatbot
+
+
 agent_configs: dict[str, AgentConfig] = {
-    "chatbot": AgentConfig(description="A simple chatbot", factory=_create_chatbot),
+    "chatbot": AgentConfig(
+        description="Main DFT Agent - Comprehensive assistant for DFT workflows, structure generation, QE input creation, SLURM job management, and materials science calculations",
+        factory=_create_chatbot,
+    ),
     "dft_agent": AgentConfig(
         description="Expert DFT agent for computational materials science workflows",
         factory=_create_dft_agent,
@@ -48,6 +60,10 @@ agent_configs: dict[str, AgentConfig] = {
     "unified_agent": AgentConfig(
         description="Unified agent combining general and computational capabilities with intelligent planning",
         factory=_create_unified_agent,
+    ),
+    "slurm_scheduler": AgentConfig(
+        description="SLURM job scheduler agent for HPC job management and automation",
+        factory=_create_slurm_scheduler,
     ),
 }
 

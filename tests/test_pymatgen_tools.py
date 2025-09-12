@@ -53,7 +53,7 @@ class TestMaterialsProjectAliasFields:
                 band_gap=3.2,
                 density=4.23,
                 energy_above_hull=0.0,
-                symmetry=MockSymmetry("P42/mnm", 136)
+                symmetry=MockSymmetry("P42/mnm", 136),
             ),
             MockMPDoc(
                 material_id="mp-5678",
@@ -62,11 +62,11 @@ class TestMaterialsProjectAliasFields:
                 band_gap=0.0,
                 density=4.15,
                 energy_above_hull=0.05,
-                symmetry=MockSymmetry("Pbnm", 62)
-            )
+                symmetry=MockSymmetry("Pbnm", 62),
+            ),
         ]
 
-    @patch('backend.agents.dft_tools.pymatgen_tools.MPRester')
+    @patch("backend.agents.dft_tools.pymatgen_tools.MPRester")
     def test_pretty_formula_alias(self, mock_mprester):
         """Test that pretty_formula alias is correctly mapped to formula_pretty."""
         # Setup mock
@@ -81,20 +81,20 @@ class TestMaterialsProjectAliasFields:
             result = pm_tools.search_materials_project.func(
                 formula=self.test_formula,
                 properties=["material_id", "pretty_formula"],
-                api_key=self.test_api_key
+                api_key=self.test_api_key,
             )
 
             # Verify the search was called with normalized field
             mock_mpr.materials.summary.search.assert_called_once_with(
                 formula=self.test_formula,
-                fields=sorted(["material_id", "formula_pretty"])
+                fields=sorted(["material_id", "formula_pretty"]),
             )
 
             # Check result contains expected materials
             assert "mp-1234" in result
             assert "TiO2" in result
 
-    @patch('backend.agents.dft_tools.pymatgen_tools.MPRester')
+    @patch("backend.agents.dft_tools.pymatgen_tools.MPRester")
     def test_energy_above_hull_aliases(self, mock_mprester):
         """Test e_above_hull and eAboveHull aliases map to energy_above_hull."""
         mock_mpr = MagicMock()
@@ -111,16 +111,16 @@ class TestMaterialsProjectAliasFields:
                 _ = pm_tools.search_materials_project.func(
                     formula=self.test_formula,
                     properties=["material_id", alias],
-                    api_key=self.test_api_key
+                    api_key=self.test_api_key,
                 )
 
                 # Verify normalized field is used
                 mock_mpr.materials.summary.search.assert_called_once_with(
                     formula=self.test_formula,
-                    fields=sorted(["material_id", "energy_above_hull"])
+                    fields=sorted(["material_id", "energy_above_hull"]),
                 )
 
-    @patch('backend.agents.dft_tools.pymatgen_tools.MPRester')
+    @patch("backend.agents.dft_tools.pymatgen_tools.MPRester")
     def test_spacegroup_aliases(self, mock_mprester):
         """Test various spacegroup aliases all map to symmetry."""
         mock_mpr = MagicMock()
@@ -131,8 +131,11 @@ class TestMaterialsProjectAliasFields:
             os.chdir(temp_dir)
 
             spacegroup_aliases = [
-                "spacegroup", "space_group", "spacegroup_symbol",
-                "spacegroup_number", "crystal_system"
+                "spacegroup",
+                "space_group",
+                "spacegroup_symbol",
+                "spacegroup_number",
+                "crystal_system",
             ]
 
             for alias in spacegroup_aliases:
@@ -141,16 +144,15 @@ class TestMaterialsProjectAliasFields:
                 _ = pm_tools.search_materials_project.func(
                     formula=self.test_formula,
                     properties=["material_id", alias],
-                    api_key=self.test_api_key
+                    api_key=self.test_api_key,
                 )
 
                 # All should map to symmetry field
                 mock_mpr.materials.summary.search.assert_called_once_with(
-                    formula=self.test_formula,
-                    fields=sorted(["material_id", "symmetry"])
+                    formula=self.test_formula, fields=sorted(["material_id", "symmetry"])
                 )
 
-    @patch('backend.agents.dft_tools.pymatgen_tools.MPRester')
+    @patch("backend.agents.dft_tools.pymatgen_tools.MPRester")
     def test_multiple_aliases_combined(self, mock_mprester):
         """Test multiple aliases in one query are correctly normalized."""
         mock_mpr = MagicMock()
@@ -164,30 +166,34 @@ class TestMaterialsProjectAliasFields:
             properties = [
                 "material_id",
                 "pretty_formula",  # -> formula_pretty
-                "e_above_hull",    # -> energy_above_hull
-                "spacegroup",      # -> symmetry
+                "e_above_hull",  # -> energy_above_hull
+                "spacegroup",  # -> symmetry
                 "crystal_system",  # -> symmetry (duplicate)
-                "band_gap"         # no alias needed
+                "band_gap",  # no alias needed
             ]
 
             _ = pm_tools.search_materials_project.func(
                 formula=self.test_formula,
                 properties=properties,
-                api_key=self.test_api_key
+                api_key=self.test_api_key,
             )
 
             # Should normalize and deduplicate
-            expected_fields = sorted([
-                "material_id", "formula_pretty", "energy_above_hull",
-                "symmetry", "band_gap"
-            ])
-
-            mock_mpr.materials.summary.search.assert_called_once_with(
-                formula=self.test_formula,
-                fields=expected_fields
+            expected_fields = sorted(
+                [
+                    "material_id",
+                    "formula_pretty",
+                    "energy_above_hull",
+                    "symmetry",
+                    "band_gap",
+                ]
             )
 
-    @patch('backend.agents.dft_tools.pymatgen_tools.MPRester')
+            mock_mpr.materials.summary.search.assert_called_once_with(
+                formula=self.test_formula, fields=expected_fields
+            )
+
+    @patch("backend.agents.dft_tools.pymatgen_tools.MPRester")
     def test_symmetry_alias_ensures_symmetry_field(self, mock_mprester):
         """Test that any symmetry alias ensures symmetry field is requested."""
         mock_mpr = MagicMock()
@@ -201,17 +207,16 @@ class TestMaterialsProjectAliasFields:
             _ = pm_tools.search_materials_project.func(
                 formula=self.test_formula,
                 properties=["material_id", "spacegroup"],
-                api_key=self.test_api_key
+                api_key=self.test_api_key,
             )
 
             # Should include symmetry field
             expected_fields = sorted(["material_id", "symmetry"])
             mock_mpr.materials.summary.search.assert_called_once_with(
-                formula=self.test_formula,
-                fields=expected_fields
+                formula=self.test_formula, fields=expected_fields
             )
 
-    @patch('backend.agents.dft_tools.pymatgen_tools.MPRester')
+    @patch("backend.agents.dft_tools.pymatgen_tools.MPRester")
     def test_non_alias_fields_unchanged(self, mock_mprester):
         """Test that non-alias fields are passed through unchanged."""
         mock_mpr = MagicMock()
@@ -222,21 +227,25 @@ class TestMaterialsProjectAliasFields:
             os.chdir(temp_dir)
 
             # Use fields that don't have aliases
-            properties = ["material_id", "band_gap", "density", "formation_energy_per_atom"]
+            properties = [
+                "material_id",
+                "band_gap",
+                "density",
+                "formation_energy_per_atom",
+            ]
 
             _ = pm_tools.search_materials_project.func(
                 formula=self.test_formula,
                 properties=properties,
-                api_key=self.test_api_key
+                api_key=self.test_api_key,
             )
 
             # Should pass through unchanged
             mock_mpr.materials.summary.search.assert_called_once_with(
-                formula=self.test_formula,
-                fields=sorted(properties)
+                formula=self.test_formula, fields=sorted(properties)
             )
 
-    @patch('backend.agents.dft_tools.pymatgen_tools.MPRester')
+    @patch("backend.agents.dft_tools.pymatgen_tools.MPRester")
     def test_result_contains_symmetry_info(self, mock_mprester):
         """Test that results properly extract symmetry information."""
         mock_mpr = MagicMock()
@@ -249,7 +258,7 @@ class TestMaterialsProjectAliasFields:
             pm_tools.search_materials_project.func(
                 formula=self.test_formula,
                 properties=["material_id", "spacegroup", "spacegroup_number"],
-                api_key=self.test_api_key
+                api_key=self.test_api_key,
             )
 
             # Check that results file contains symmetry info
@@ -268,7 +277,7 @@ class TestMaterialsProjectAliasFields:
             assert results_data[0]["spacegroup"] == "P42/mnm"
             assert results_data[0]["spacegroup_number"] == 136
 
-    @patch('backend.agents.dft_tools.pymatgen_tools.MPRester')
+    @patch("backend.agents.dft_tools.pymatgen_tools.MPRester")
     def test_default_properties_work(self, mock_mprester):
         """Test that default properties work without aliases."""
         mock_mpr = MagicMock()
@@ -280,21 +289,25 @@ class TestMaterialsProjectAliasFields:
 
             # Use default properties (no aliases)
             _ = pm_tools.search_materials_project.func(
-                formula=self.test_formula,
-                api_key=self.test_api_key
+                formula=self.test_formula, api_key=self.test_api_key
             )
 
-            expected_fields = sorted([
-                "material_id", "formula_pretty", "structure",
-                "formation_energy_per_atom", "band_gap", "density"
-            ])
+            expected_fields = sorted(
+                [
+                    "material_id",
+                    "formula_pretty",
+                    "structure",
+                    "formation_energy_per_atom",
+                    "band_gap",
+                    "density",
+                ]
+            )
 
             mock_mpr.materials.summary.search.assert_called_once_with(
-                formula=self.test_formula,
-                fields=expected_fields
+                formula=self.test_formula, fields=expected_fields
             )
 
-    @patch('backend.agents.dft_tools.pymatgen_tools.MPRester')
+    @patch("backend.agents.dft_tools.pymatgen_tools.MPRester")
     def test_empty_results_handling(self, mock_mprester):
         """Test proper handling when no materials are found."""
         mock_mpr = MagicMock()
@@ -307,13 +320,13 @@ class TestMaterialsProjectAliasFields:
             result = pm_tools.search_materials_project.func(
                 formula="NonExistentCompound",
                 properties=["material_id", "pretty_formula"],
-                api_key=self.test_api_key
+                api_key=self.test_api_key,
             )
 
             assert "No materials found" in result
             assert "NonExistentCompound" in result
 
-    @patch('backend.agents.dft_tools.pymatgen_tools.MPRester')
+    @patch("backend.agents.dft_tools.pymatgen_tools.MPRester")
     def test_field_sorting_consistency(self, mock_mprester):
         """Test that fields are consistently sorted for API calls."""
         mock_mpr = MagicMock()
@@ -331,19 +344,17 @@ class TestMaterialsProjectAliasFields:
                 mock_mpr.materials.summary.search.reset_mock()
 
                 _ = pm_tools.search_materials_project.func(
-                    formula=self.test_formula,
-                    properties=props,
-                    api_key=self.test_api_key
+                    formula=self.test_formula, properties=props, api_key=self.test_api_key
                 )
 
                 # Should always use sorted fields
-                expected_fields = sorted(["formula_pretty", "material_id", "energy_above_hull"])
+                expected_fields = sorted(
+                    ["formula_pretty", "material_id", "energy_above_hull"]
+                )
                 mock_mpr.materials.summary.search.assert_called_once_with(
-                    formula=self.test_formula,
-                    fields=expected_fields
+                    formula=self.test_formula, fields=expected_fields
                 )
 
 
 if __name__ == "__main__":
     pytest.main([__file__])
-
