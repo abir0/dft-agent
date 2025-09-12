@@ -28,8 +28,26 @@ fi
 echo -e "${YELLOW}📦 Activating virtual environment...${NC}"
 source .venv/bin/activate
 
+# Function to check if port is in use (cross-platform)
+check_port() {
+    local port=$1
+    if command -v lsof >/dev/null 2>&1; then
+        # macOS and most Unix systems
+        lsof -i :$port >/dev/null 2>&1
+    elif command -v ss >/dev/null 2>&1; then
+        # Linux systems with iproute2
+        ss -tulpn | grep -q ":$port"
+    elif command -v netstat >/dev/null 2>&1; then
+        # Fallback to netstat
+        netstat -an | grep -q ":$port"
+    else
+        # No port checking available
+        return 1
+    fi
+}
+
 # Check if services are already running
-if ss -tulpn | grep -q ":8083"; then
+if check_port 8083; then
     echo -e "${YELLOW}⚠️  Backend service already running on port 8083${NC}"
 else
     echo -e "${GREEN}🔧 Starting backend service on port 8083...${NC}"
@@ -41,7 +59,7 @@ else
     echo -e "${YELLOW}⏳ Waiting for backend to start...${NC}"
     for i in {1..10}; do
         sleep 2
-        if ss -tulpn | grep -q ":8083"; then
+        if check_port 8083; then
             echo -e "${GREEN}✅ Backend service started successfully${NC}"
             break
         fi
@@ -52,7 +70,7 @@ else
     done
 fi
 
-if ss -tulpn | grep -q ":8501"; then
+if check_port 8501; then
     echo -e "${YELLOW}⚠️  Frontend service already running on port 8501${NC}"
 else
     echo -e "${GREEN}🎨 Starting frontend service on port 8501...${NC}"
@@ -66,7 +84,7 @@ else
     echo -e "${YELLOW}⏳ Waiting for frontend to start...${NC}"
     for i in {1..10}; do
         sleep 2
-        if ss -tulpn | grep -q ":8501"; then
+        if check_port 8501; then
             echo -e "${GREEN}✅ Frontend service started successfully${NC}"
             break
         fi
