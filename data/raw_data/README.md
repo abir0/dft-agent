@@ -8,7 +8,7 @@ This directory contains three adsorption energy datasets from different sources,
 |---------|--------|---------|------|-------------|
 | CPD_H | Catalysis-hub | ~2,500+ | 3.6MB | Large collection of adsorption data from catalysis-hub database |
 | OC2020_H | Open Catalyst Project 2020 | ~130 | 250KB | Hydrogen adsorption energies on various surfaces |
-| jp4c06194_SI | Literature | 281 | 290KB | Adsorption data from 2024 research publication |
+| jp4c06194_SI | Literature | 281 | 290KB | Hydrogen adsorption data from 2024 research publication |
 
 ## Dataset Schemas
 
