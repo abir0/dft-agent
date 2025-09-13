@@ -1,13 +1,19 @@
 services:
-
   agent_service:
     build:
       context: .
       dockerfile: backend/Dockerfile
     ports:
-      - "8080:8080"
+      - "8083:8083"
     env_file:
       - .env
+    environment:
+      # Ensure QE binaries are on PATH inside container (already in Dockerfile, here for clarity)
+      - QE_BIN_DIR=/usr/bin
+    volumes:
+      - workspace_data:/app/WORKSPACE
+      - ./logs:/app/logs
+    restart: unless-stopped
 
   streamlit_app:
     build:
@@ -18,4 +24,11 @@ services:
     depends_on:
       - agent_service
     environment:
-      - AGENT_URL=http://agent_service:8080
+      - AGENT_URL=http://agent_service:8083
+    volumes:
+      # Mount workspace read-only for UI browsing (remove :ro for write access)
+      - workspace_data:/app/WORKSPACE:ro
+    restart: unless-stopped
+
+volumes:
+  workspace_data:

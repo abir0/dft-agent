@@ -15,11 +15,13 @@ dependencies = [
     "google-auth-oauthlib",
     "httpx",
     "langchain-anthropic",
+    "langchain-cerebras",
     "langchain-community",
     "langchain-core",
     "langchain-experimental",
     "langchain-huggingface",
     "langchain-groq",
+    "langchain-mcp-adapters",
     "langchain-ollama",
     "langchain-openai",
     "langgraph",
@@ -37,6 +39,7 @@ dependencies = [
     "python-dotenv",
     "python-multipart",
     "requests",
+    "pypdf",
     "seaborn",
     "seekpath",
     "setuptools",
@@ -58,7 +61,8 @@ client = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
+exclude = ["dist", "build", "scripts", "data", "logs", "WORKSPACE", ".venv"]
 
 [tool.uv]
 dev-dependencies = [

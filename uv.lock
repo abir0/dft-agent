@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = "==3.12.*"
 resolution-markers = [
     "sys_platform == 'win32'",
@@ -469,6 +469,7 @@ dependencies = [
     { name = "google-auth-oauthlib" },
     { name = "httpx" },
     { name = "langchain-anthropic" },
+    { name = "langchain-cerebras" },
     { name = "langchain-community" },
     { name = "langchain-core" },
     { name = "langchain-experimental" },
@@ -489,6 +490,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pymatgen" },
+    { name = "pypdf" },
     { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "requests" },
@@ -526,11 +528,13 @@ requires-dist = [
     { name = "google-auth-oauthlib" },
     { name = "httpx" },
     { name = "langchain-anthropic" },
+    { name = "langchain-cerebras" },
     { name = "langchain-community" },
     { name = "langchain-core" },
     { name = "langchain-experimental" },
     { name = "langchain-groq" },
     { name = "langchain-huggingface" },
+    { name = "langchain-mcp-adapters" },
     { name = "langchain-mcp-adapters", specifier = ">=0.1.9" },
     { name = "langchain-ollama" },
     { name = "langchain-openai" },
@@ -546,6 +550,7 @@ requires-dist = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pymatgen" },
+    { name = "pypdf" },
     { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "requests" },
@@ -1118,6 +1123,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/1f/ab/bdaefa42fdab238efff45eb28c6cd74c011979092408decdae22c0bf7e66/langchain_anthropic-0.3.19.tar.gz", hash = "sha256:e62259382586ee5c44e9a9459d00b74a7e191550e5fadfad28f0daa5d143d745", size = 281502, upload-time = "2025-08-18T18:33:36.811Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a2/69/64473db52d02715f3815df3b25c9816b5801a58762a5ae62a3e5b84169a0/langchain_anthropic-0.3.19-py3-none-any.whl", hash = "sha256:5b5372ef7e10ee32b4308b4d9e1ed623c360b7d0a233c017e5209ad8118d5ab7", size = 31775, upload-time = "2025-08-18T18:33:35.596Z" },
+]
+
+[[package]]
+name = "langchain-cerebras"
+version = "0.5.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "langchain-core" },
+    { name = "langchain-openai" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/42/61/9a4cb075d2c400690fc7738fa936193461f9d0b92dea2d5e27fd44244546/langchain_cerebras-0.5.0.tar.gz", hash = "sha256:24cfe76358cd8c779f33c77708df08cc5fec81ed13797830396be0f52abdd80a", size = 7402, upload-time = "2025-01-10T17:45:36.022Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bf/78/1dacd83bd324c5c64b88367facb86ad9e5e5d89dfd0dceaed3d444c42df6/langchain_cerebras-0.5.0-py3-none-any.whl", hash = "sha256:f129df699d6eb71d8e2602d7abe9ae75c289168b2e52d33cdefe5d4982e027b9", size = 7839, upload-time = "2025-01-10T17:45:33.945Z" },
 ]
 
 [[package]]
@@ -2192,6 +2210,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/bb/22/f1129e69d94ffff626bdb5c835506b3a5b4f3d070f17ea295e12c2c6f60f/pyparsing-3.2.3.tar.gz", hash = "sha256:b9c13f1ab8b3b542f72e28f634bad4de758ab3ce4546e4301970ad6fa77c38be", size = 1088608, upload-time = "2025-03-25T05:01:28.114Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/05/e7/df2285f3d08fee213f2d041540fa4fc9ca6c2d44cf36d3a035bf2a8d2bcc/pyparsing-3.2.3-py3-none-any.whl", hash = "sha256:a749938e02d6fd0b59b356ca504a24982314bb090c383e3cf201c95ef7e2bfcf", size = 111120, upload-time = "2025-03-25T05:01:24.908Z" },
+]
+
+[[package]]
+name = "pypdf"
+version = "6.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/20/ac/a300a03c3b34967c050677ccb16e7a4b65607ee5df9d51e8b6d713de4098/pypdf-6.0.0.tar.gz", hash = "sha256:282a99d2cc94a84a3a3159f0d9358c0af53f85b4d28d76ea38b96e9e5ac2a08d", size = 5033827, upload-time = "2025-08-11T14:22:02.352Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2c/83/2cacc506eb322bb31b747bc06ccb82cc9aa03e19ee9c1245e538e49d52be/pypdf-6.0.0-py3-none-any.whl", hash = "sha256:56ea60100ce9f11fc3eec4f359da15e9aec3821b036c1f06d2b660d35683abb8", size = 310465, upload-time = "2025-08-11T14:22:00.481Z" },
 ]
 
 [[package]]
