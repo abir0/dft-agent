@@ -133,7 +133,11 @@ def search_adsorption_data(
     for record in records:
         # Check adsorbate
         if adsorbate:
-            formula = record.get('adsorbate', {}).get('formula', '')
+            adsorbate_data = record.get('adsorbate', '')
+            if isinstance(adsorbate_data, dict):
+                formula = adsorbate_data.get('formula', '')
+            else:
+                formula = str(adsorbate_data)  # Handle case where adsorbate is just a string
             if not formula or adsorbate not in formula:
                 continue
             
