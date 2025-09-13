@@ -21,7 +21,13 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from backend.agents.asta_mcp_client import get_specific_asta_tools
 from backend.agents.library.dft_agent.tool_registry import TOOL_REGISTRY
 from backend.agents.llm import get_model, settings
-from backend.agents.tools import calculator, python_repl
+from backend.agents.tools import (
+    calculator, 
+    python_repl,
+    load_local_adsorption_data,
+    search_adsorption_data,
+    list_available_datasets
+)
 
 
 class AgentState(MessagesState, total=False):
@@ -192,6 +198,10 @@ base_tools = [
     calculator,
     python_repl,
     fetch_open_access_full_text,
+    # Local dataset tools for hydrogen adsorption data
+    load_local_adsorption_data,
+    search_adsorption_data,
+    list_available_datasets,
     # Add key DFT tools directly
     TOOL_REGISTRY["generate_bulk"],
     TOOL_REGISTRY["generate_slab"],
