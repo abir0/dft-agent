@@ -37,6 +37,16 @@ from .qe_tools import (
     read_output_file,
     submit_local_job,
 )
+from .slurm_tools import (
+    cancel_slurm_job,
+    check_slurm_job_status,
+    generate_slurm_script,
+    get_slurm_job_output,
+    list_slurm_jobs,
+    monitor_slurm_jobs,
+    submit_slurm_job,
+    verify_job_submission,
+)
 from .structure_tools import (
     add_adsorbate,
     add_vacuum,
@@ -76,4 +86,13 @@ __all__ = [  # noqa: RUF022
     "query_calculations",
     "export_results",
     "search_similar_calculations",
+    # SLURM tools
+    "generate_slurm_script",
+    "submit_slurm_job",
+    "check_slurm_job_status",
+    "cancel_slurm_job",
+    "list_slurm_jobs",
+    "get_slurm_job_output",
+    "monitor_slurm_jobs",
+    "verify_job_submission",
 ]

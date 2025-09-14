@@ -74,9 +74,9 @@ def generate_bulk(
         conventional = sga.get_conventional_standard_structure()
 
         # File paths
-        output_dir = get_subdir_path(_thread_id, "structures/bulk")
+        output_dir = get_subdir_path(_thread_id, "structures")
 
-        stem = f"{element}_{crystal}_a{a:.2f}"
+        stem = f"bulk_{element}_{crystal}_a{a:.2f}"
         if c_over_a:
             stem += f"_c{c_over_a:.2f}"
 
@@ -162,7 +162,7 @@ def create_supercell(
         input_path = Path(structure_file)
 
         # Use workspace-specific directory
-        output_dir = get_subdir_path(_thread_id, "structures/supercells")
+        output_dir = get_subdir_path(_thread_id, "structures")
 
         scale_str = "x".join(map(str, scaling_matrix))
         stem = f"{input_path.stem}_supercell_{scale_str}"
@@ -234,7 +234,7 @@ def generate_slab(
             # Simple orthogonalization - may need improvement for complex cases
 
         input_path = Path(structure_file)
-        output_dir = get_subdir_path(_thread_id, "structures/slabs")
+        output_dir = get_subdir_path(_thread_id, "structures")
 
         miller_str = "".join(map(str, miller_indices))
         stem = f"{input_path.stem}_slab_{miller_str}_{layers}L_vac{vacuum:.1f}"
@@ -341,7 +341,7 @@ def add_adsorbate(
         ase_add_adsorbate(slab, adsorbate, height, position=tuple(site_position))
 
         input_path = Path(slab_file)
-        output_dir = get_subdir_path(_thread_id, "structures/with_adsorbates")
+        output_dir = get_subdir_path(_thread_id, "structures")
 
         pos_str = f"x{site_position[0]:.2f}y{site_position[1]:.2f}"
         stem = f"{input_path.stem}_{adsorbate_formula}_{pos_str}_h{height:.1f}"
@@ -400,7 +400,7 @@ def add_vacuum(
 
         input_path = Path(structure_file)
         # Use workspace-specific directory
-        output_dir = get_subdir_path(_thread_id, "structures/with_vacuum")
+        output_dir = get_subdir_path(_thread_id, "structures")
 
         axis_name = ["x", "y", "z"][axis]
         stem = f"{input_path.stem}_vac{axis_name}{thickness:.1f}"

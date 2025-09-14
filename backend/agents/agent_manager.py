@@ -2,9 +2,10 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 from langgraph.graph.state import CompiledStateGraph
+
 from backend.core import AgentInfo
 
-DEFAULT_AGENT = "dft_agent"
+DEFAULT_AGENT = "chatbot"
 
 
 @dataclass
@@ -22,22 +23,34 @@ class AgentConfig:
 
 def _create_chatbot():
     from backend.agents.library.chatbot import chatbot
+
     return chatbot
 
 
 def _create_dft_agent():
     from backend.agents.library.dft_agent.agent import dft_agent
+
     return dft_agent
+
+
+def _create_slurm_scheduler():
+    from backend.agents.library.slurm_scheduler.agent import slurm_scheduler_agent
+
+    return slurm_scheduler_agent
 
 
 agent_configs: dict[str, AgentConfig] = {
     "chatbot": AgentConfig(
-        description="A simple chatbot", 
-        factory=_create_chatbot
+        description="Assistant for DFT workflows, structure generation, QE input creation, SLURM job management, and materials science calculations",
+        factory=_create_chatbot,
     ),
     "dft_agent": AgentConfig(
         description="Expert DFT agent for computational materials science workflows",
         factory=_create_dft_agent,
+    ),
+    "slurm_scheduler": AgentConfig(
+        description="SLURM job scheduler agent for HPC job management and automation",
+        factory=_create_slurm_scheduler,
     ),
 }
 

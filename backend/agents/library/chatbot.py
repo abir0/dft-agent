@@ -19,6 +19,7 @@ from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
 from backend.agents.asta_mcp_client import get_specific_asta_tools
+from backend.agents.library.dft_agent.tool_registry import TOOL_REGISTRY
 from backend.agents.llm import get_model, settings
 from backend.agents.tools import calculator, python_repl
 
@@ -103,7 +104,7 @@ def fetch_open_access_full_text(url: str, max_chars: int = 60000) -> str:
 
                 reader = PdfReader(BytesIO(resp.content))
                 pages = []
-                for i, page in enumerate(reader.pages):
+                for _, page in enumerate(reader.pages):
                     try:
                         pages.append(page.extract_text() or "")
                     except Exception:
@@ -191,6 +192,17 @@ base_tools = [
     calculator,
     python_repl,
     fetch_open_access_full_text,
+    # Add key DFT tools directly
+    TOOL_REGISTRY["generate_bulk"],
+    TOOL_REGISTRY["generate_slab"],
+    TOOL_REGISTRY["generate_qe_input"],
+    TOOL_REGISTRY["generate_slurm_script"],
+    TOOL_REGISTRY["submit_slurm_job"],
+    TOOL_REGISTRY["check_slurm_job_status"],
+    TOOL_REGISTRY["search_materials_project"],
+    TOOL_REGISTRY["analyze_crystal_structure"],
+    TOOL_REGISTRY["find_pseudopotentials"],
+    TOOL_REGISTRY["verify_job_submission"],
 ]
 
 # Global variable to cache loaded tools
@@ -241,38 +253,97 @@ Path(images_dir).mkdir(parents=True, exist_ok=True)
 datasets_dir = f"{settings.ROOT_PATH}/data/raw_data"
 
 instructions = f"""
-    You are a helpful chat assistant with expertise in materials science and DFT calculations,
-    with the ability to search the web, search scientific literature, and use other tools.
+    You are an research assistant for Density Functional Theory (DFT) calculations and materials science workflows.
+    You help users with structure generation, Quantum ESPRESSO input creation, SLURM job management, and scientific analysis.
     Today's date is {current_date}.
 
-    NOTE: THE USER CAN'T SEE THE TOOL RESPONSE.
+    **AVAILABLE DATASETS:**
+    You have access to curated adsorption energy datasets located in {datasets_dir}. A comprehensive README.md in that directory documents:
+    - **CPD_H**: Catalysis-hub dataset (~3.6MB, extensive adsorption data)
+    - **OC2020_H**: Open Catalyst Project 2020 hydrogen adsorption data (250KB)  
+    - **jp4c06194_SI**: 2024 literature dataset (281 entries, 290KB)
+    
+    The README provides detailed schema documentation, field definitions, and usage guidelines. Reference this when working with adsorption energies, benchmarking calculations, or analyzing surface chemistry data.
 
-    A few things to remember:
-    - When searching, be persistent. Expand your query bounds if the first search returns no results.
-    - If a search comes up empty, expand your search before giving up.
-    - Use the search_papers_by_relevance tool to find peer-reviewed scientific literature by keyword.
-    - Use the search_paper_by_title tool to find specific papers by their title.
-    - Use the get_papers tool to get detailed information about specific papers using their ID.
-    - Use the get_citations tool to find papers that cite a specific paper.
-    - When a paper result indicates isOpenAccess=true and provides a URL, use the
-      fetch_open_access_full_text tool to retrieve the article's full text for analysis.
-    - Use the search_authors_by_name and get_author_papers tools to find papers by specific researchers.
-    - If Asta scientific paper search tools return 403 Forbidden errors, inform the user that there may be an API key permission issue and suggest using web search instead.
-    - Please include markdown-formatted links to any citations used in your response. Only include one
-    or two citations per response unless more are needed. ONLY USE LINKS RETURNED BY THE TOOLS.
-    - Use calculator tool with numexpr to answer math questions. The user does not understand numexpr,
-      so for the final response, use human readable format or markdown format.
-    - Use Python REPL tool for data analysis and visualization tasks.
-    - If Python REPL shows error fix the error in code and run again, if you are failing more than 3 times give up.
-    - For data processing and analysis, use pandas library.
-    - Local datasets are available at: {datasets_dir}
-    - Load datasets with absolute paths via pandas, e.g., `import pandas as pd; from pathlib import Path; df = pd.read_csv(Path("{datasets_dir}") / "file.csv")`. Prefer read-only access; do not move or rename source files.
-    - For charts generation, use seaborn or matplotlib.
-    - ALWAYS save the plots/charts into the following folder: {images_dir}
-    - Only include markdown-formatted links to citations used in your response. Only include one
-    or two citations per response unless more are needed. ONLY USE LINKS RETURNED BY THE TOOLS.
-    - When displaying image to the user, use html <img> tag, instead of markdown.
-    ALWAYS USE IMG TAG FOR LINKING IMAGES.
+    **YOUR CORE CAPABILITIES:**
+    1. **Structure Generation**: Create bulk crystals and surface slabs using pymatgen
+    2. **QE Input Creation**: Generate optimized Quantum ESPRESSO input files with proper parameters
+    3. **SLURM Job Management**: Create, submit, and monitor HPC job scripts
+    4. **Materials Database**: Search Materials Project for properties and validation
+    5. **Parameter Recommendations**: Suggest optimal computational parameters
+    6. **Scientific Literature**: Search and analyze research papers
+    7. **Error Handling**: Validate calculations and provide troubleshooting
+    8. **Data Analysis**: Analyze adsorption energy datasets, use Python for data analysis, post-processing and visualization
+
+    **WORKFLOW GUIDANCE:**
+    - Always start by understanding what the user wants to calculate
+    - For new users, use get_agent_capabilities() to show available tools
+    - Generate structures first, then create QE inputs, then SLURM scripts
+    - ALWAYS submit the job after creating the script (use submit_slurm_job)
+    - Provide monitoring instructions and job status checking
+    - Validate calculations against known properties when possible
+    - For adsorption studies, reference the available datasets in {datasets_dir}/README.md for benchmarking and parameter validation
+    **CRITICAL: ALWAYS USE TOOLS DIRECTLY**
+    - When user asks for structure generation, immediately call generate_slab() or generate_bulk()
+    - When user asks for QE input, immediately call generate_qe_input()
+    - When user asks for SLURM script, immediately call generate_slurm_script()
+    - When user asks to submit job, immediately call submit_slurm_job()
+    - When user asks to check job status, immediately call check_slurm_job_status()
+    - DO NOT ask for more information - use reasonable defaults and call the tools
+
+    **IMPORTANT RULES:**
+    - When creating SLURM scripts, ALWAYS follow up with job submission using submit_slurm_job()
+    - NEVER claim a job was submitted without actually calling submit_slurm_job()
+    - Always verify job submission by checking the returned job ID
+    - Search Materials Project for validation and reference data
+    - Provide clear step-by-step instructions for monitoring jobs
+    - Handle errors gracefully and suggest solutions
+    - Use thread_id parameter for workspace organization
+    - If job submission fails, report the actual error message
+
+    **TOOL USAGE:**
+    - Use search_materials_project() to find material properties
+    - Use MCP Paper Miner tools (search_papers_by_relevance, get_papers, get_citations) for literature search
+    - Use generate_slab() for surface calculations (e.g., Pt(111))
+    - Use generate_qe_input() with proper parameters for calculations
+    - Use generate_slurm_script() followed by submit_slurm_job()
+    - Use check_slurm_job_status() for monitoring
+    - Use web_search() for current information
+    - Use calculator and python_repl for analysis and dataset processing
+    - For adsorption energy analysis, read {datasets_dir}/README.md first to understand available data schemas
+    **LITERATURE WORKFLOW:**
+    - When user asks for literature-based parameters, ALWAYS use MCP Paper Miner tools first
+    - Use search_papers_by_relevance() to find relevant papers
+    - Use get_papers() to get detailed paper information
+    - Use get_citations() to get proper citations
+    - Extract specific parameters (cutoffs, k-points, functionals) from paper content
+    - CRITICAL: ALWAYS provide complete paper citations in this EXACT format:
+      * **Title:** [Full Title]
+      * **Authors:** [Author1, Author2, et al.]
+      * **Journal:** [Journal Name, Year, Volume, Pages]
+      * **DOI:** [DOI if available]
+      * **URL:** [Link if available]
+    - For each parameter used, explicitly state: "This parameter was extracted from [Paper Title] by [Authors]"
+    - NEVER use generic parameters without citing specific papers
+    - If you cannot extract specific parameters from papers, clearly state this limitation
+    - Always use get_citations() tool to get proper citation format
+
+    **ERROR HANDLING:**
+    - If tools fail, provide clear error messages and solutions
+    - Validate input parameters before calculations
+    - Check job status and provide troubleshooting steps
+    - If rate limits are hit, break down complex workflows into smaller steps
+    - Always complete at least the first few steps before hitting limits
+    - Suggest alternative approaches when calculations fail
+
+    **RESPONSE FORMAT:**
+    - Be clear and educational for non-experts
+    - Provide step-by-step instructions
+    - Include file paths and job IDs for tracking
+    - Explain what each step accomplishes
+    - Show how to monitor and validate results
+
+    NOTE: THE USER CAN'T SEE THE TOOL RESPONSE DIRECTLY - summarize results clearly.
     """
 
 
@@ -287,12 +358,19 @@ async def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, A
 
 
 async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
-    m = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-    model_runnable = await wrap_model(m)
-    response = await model_runnable.ainvoke(state, config)
+    try:
+        model_name = config["configurable"].get("model", settings.DEFAULT_MODEL)
+        m = get_model(model_name)
+        model_runnable = await wrap_model(m)
+        response = await model_runnable.ainvoke(state, config)
+        return {"messages": [response]}
 
-    # We return a list, because this will get added to the existing list
-    return {"messages": [response]}
+    except Exception as e:
+        # Return an error message
+        error_msg = AIMessage(
+            content=f"I encountered an error: {str(e)}. Please try again or check the system configuration."
+        )
+        return {"messages": [error_msg]}
 
 
 # Agent functions
@@ -342,6 +420,7 @@ async def create_chatbot_workflow():
 class LazyWorkflow:
     def __init__(self):
         self._workflow = None
+        self.base_tools = base_tools
 
     async def get_workflow(self):
         if self._workflow is None:
@@ -362,6 +441,10 @@ class LazyWorkflow:
         async for event in workflow.astream_events(*args, **kwargs):
             yield event
 
+    async def aget_state(self, *args, **kwargs):
+        workflow = await self.get_workflow()
+        return await workflow.aget_state(*args, **kwargs)
+
     def __getattr__(self, name):
         # For any other methods, delegate to the workflow once it's created
         def method_wrapper(*args, **kwargs):
@@ -376,6 +459,7 @@ class LazyWorkflow:
             return async_method()
 
         return method_wrapper
+
 
 # Create the lazy workflow instance
 chatbot = LazyWorkflow()

@@ -1,11 +1,19 @@
 # Local data & logs
 /data/
+# Exception: Allow README.md in raw_data for documentation
+!/data/raw_data/README.md
 /workspaces/
 WORKSPACE/
 weaviate_data/
 faiss_index/
 logs/
 credentials.json
+
+# Materials Project outputs
+materials_project_data/
+pseudopotentials/
+**/analysis/
+**/formation_energies/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -23,6 +31,7 @@ __pycache__/
 # VS Code
 .vscode
 .DS_Store
+.editorconfig
 
 # C extensions
 *.so
@@ -195,5 +204,8 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-# LangGraph
+# Others
 .langgraph_api/
+.uv
+.uv.backup
+*.pid

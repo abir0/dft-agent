@@ -469,6 +469,7 @@ dependencies = [
     { name = "google-auth-oauthlib" },
     { name = "httpx" },
     { name = "langchain-anthropic" },
+    { name = "langchain-cerebras" },
     { name = "langchain-community" },
     { name = "langchain-core" },
     { name = "langchain-experimental" },
@@ -527,6 +528,7 @@ requires-dist = [
     { name = "google-auth-oauthlib" },
     { name = "httpx" },
     { name = "langchain-anthropic" },
+    { name = "langchain-cerebras" },
     { name = "langchain-community" },
     { name = "langchain-core" },
     { name = "langchain-experimental" },
@@ -1121,6 +1123,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/1f/ab/bdaefa42fdab238efff45eb28c6cd74c011979092408decdae22c0bf7e66/langchain_anthropic-0.3.19.tar.gz", hash = "sha256:e62259382586ee5c44e9a9459d00b74a7e191550e5fadfad28f0daa5d143d745", size = 281502, upload-time = "2025-08-18T18:33:36.811Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a2/69/64473db52d02715f3815df3b25c9816b5801a58762a5ae62a3e5b84169a0/langchain_anthropic-0.3.19-py3-none-any.whl", hash = "sha256:5b5372ef7e10ee32b4308b4d9e1ed623c360b7d0a233c017e5209ad8118d5ab7", size = 31775, upload-time = "2025-08-18T18:33:35.596Z" },
+]
+
+[[package]]
+name = "langchain-cerebras"
+version = "0.5.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "langchain-core" },
+    { name = "langchain-openai" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/42/61/9a4cb075d2c400690fc7738fa936193461f9d0b92dea2d5e27fd44244546/langchain_cerebras-0.5.0.tar.gz", hash = "sha256:24cfe76358cd8c779f33c77708df08cc5fec81ed13797830396be0f52abdd80a", size = 7402, upload-time = "2025-01-10T17:45:36.022Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bf/78/1dacd83bd324c5c64b88367facb86ad9e5e5d89dfd0dceaed3d444c42df6/langchain_cerebras-0.5.0-py3-none-any.whl", hash = "sha256:f129df699d6eb71d8e2602d7abe9ae75c289168b2e52d33cdefe5d4982e027b9", size = 7839, upload-time = "2025-01-10T17:45:33.945Z" },
 ]
 
 [[package]]

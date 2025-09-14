@@ -6,7 +6,9 @@ from backend.agents.dft_tools import (
     add_vacuum,
     analyze_crystal_structure,
     calculate_formation_energy,
+    cancel_slurm_job,
     check_job_status,
+    check_slurm_job_status,
     create_calculations_database,
     create_supercell,
     cutoff_convergence_test,
@@ -16,7 +18,11 @@ from backend.agents.dft_tools import (
     generate_bulk,
     generate_qe_input,
     generate_slab,
+    generate_slurm_script,
+    get_slurm_job_output,
     kpoint_convergence_test,
+    list_slurm_jobs,
+    monitor_slurm_jobs,
     query_calculations,
     read_output_file,
     search_materials_project,
@@ -25,8 +31,10 @@ from backend.agents.dft_tools import (
     store_adsorption_energy,
     store_calculation,
     submit_local_job,
+    submit_slurm_job,
     update_calculation_status,
     vacuum_convergence_test,
+    verify_job_submission,
 )
 
 TOOL_REGISTRY: dict[str, Tool] = {
@@ -60,4 +68,13 @@ TOOL_REGISTRY: dict[str, Tool] = {
     "query_calculations": query_calculations,
     "export_results": export_results,
     "search_similar_calculations": search_similar_calculations,
+    # SLURM job management
+    "generate_slurm_script": generate_slurm_script,
+    "submit_slurm_job": submit_slurm_job,
+    "check_slurm_job_status": check_slurm_job_status,
+    "cancel_slurm_job": cancel_slurm_job,
+    "list_slurm_jobs": list_slurm_jobs,
+    "get_slurm_job_output": get_slurm_job_output,
+    "monitor_slurm_jobs": monitor_slurm_jobs,
+    "verify_job_submission": verify_job_submission,
 }

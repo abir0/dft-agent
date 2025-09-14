@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     ports:
-      - "8080:8080"
+      - "8083:8083"
     env_file:
       - .env
     environment:
@@ -24,7 +24,7 @@ services:
     depends_on:
       - agent_service
     environment:
-      - AGENT_URL=http://agent_service:8080
+      - AGENT_URL=http://agent_service:8083
     volumes:
       # Mount workspace read-only for UI browsing (remove :ro for write access)
       - workspace_data:/app/WORKSPACE:ro

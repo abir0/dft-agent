@@ -5,16 +5,59 @@ Tools for materials database integration, crystal analysis, and electronic struc
 analysis using Pymatgen and Materials Project API.
 """
 
+import gzip
 import json
+import shutil
+import tarfile
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import requests
 from ase.io import read
 from langchain_core.tools import tool
 from mp_api.client import MPRester
 from pymatgen.analysis.local_env import CrystalNN
+from pymatgen.core import Structure
 from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+
+from backend.settings import settings
+
+headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+}
+
+
+# Load parsed pseudopotential data
+def load_pseudopotential_metadata():
+    """Load pseudopotential metadata from JSON file."""
+    # Try multiple possible locations for the database file
+    possible_paths = [
+        "data/pseudos_metadata.json",
+        Path(__file__).parent.parent.parent.parent / "data" / "pseudos_metadata.json",
+        Path.cwd() / "data" / "pseudos_metadata.json",
+    ]
+
+    for path in possible_paths:
+        if Path(path).exists():
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    # Silently load pseudopotential database
+                    return data
+            except Exception as e:
+                print(
+                    f"Warning: Could not load pseudopotential database from {path}: {e}"
+                )
+                continue
+
+    # Return empty metadata if file not found - let the system handle missing elements dynamically
+    return {}
+
+
+PP_METADATA = load_pseudopotential_metadata()
 
 
 @tool
@@ -25,7 +68,6 @@ def search_materials_project(
     chemsys: Optional[str] = None,
     properties: Optional[List[str]] = None,
     limit: int = 10,
-    api_key: Optional[str] = None,
     band_gap: Optional[Tuple[Optional[float], Optional[float]]] = None,
     formation_energy_per_atom: Optional[Tuple[Optional[float], Optional[float]]] = None,
     energy_above_hull: Optional[Tuple[Optional[float], Optional[float]]] = None,
@@ -42,7 +84,6 @@ def search_materials_project(
         chemsys: Hyphen-joined chemical system (e.g., "Li-Fe-P-O", "Y-H").
         properties: List of properties to retrieve
         limit: Maximum number of results
-        api_key: Materials Project API key
         band_gap: (min, max) band gap in eV. Use None for an open bound, e.g., (0.0, None).
         formation_energy_per_atom: (min, max) formation energy per atom in eV/atom.
         energy_above_hull: (min, max) energy above hull in eV/atom.
@@ -54,6 +95,12 @@ def search_materials_project(
         Search results with material properties
     """
     try:
+        # Use API key from settings if not provided
+        if settings.MP_API_KEY:
+            api_key = settings.MP_API_KEY.get_secret_value()
+        else:
+            return "Error: Materials Project API key not configured. Please set MP_API_KEY in environment variables."
+
         if properties is None:
             properties = [
                 "material_id",
@@ -104,23 +151,38 @@ def search_materials_project(
 
         results = []
         for i, doc in enumerate(docs):
+            # Handle both dict and object responses
+            if isinstance(doc, dict):
+                material_id = doc.get("material_id", f"unknown_{i}")
+                formula = doc.get("formula_pretty", "unknown")
+                formation_energy = doc.get("formation_energy_per_atom")
+                band_gap = doc.get("band_gap")
+                density = doc.get("density")
+                symmetry = doc.get("symmetry")
+                structure = doc.get("structure")
+            else:
+                material_id = getattr(doc, "material_id", f"unknown_{i}")
+                formula = getattr(doc, "formula_pretty", "unknown")
+                formation_energy = getattr(doc, "formation_energy_per_atom", None)
+                band_gap = getattr(doc, "band_gap", None)
+                density = getattr(doc, "density", None)
+                symmetry = getattr(doc, "symmetry", None)
+                structure = getattr(doc, "structure", None)
+
             result = {
-                "material_id": doc.material_id,
-                "formula": doc.formula_pretty,
+                "material_id": material_id,
+                "formula": formula,
             }
 
             # Add available properties
-            if (
-                hasattr(doc, "formation_energy_per_atom")
-                and doc.formation_energy_per_atom is not None
-            ):
-                result["formation_energy_per_atom"] = float(doc.formation_energy_per_atom)
+            if formation_energy is not None:
+                result["formation_energy_per_atom"] = float(formation_energy)
 
-            if hasattr(doc, "band_gap") and doc.band_gap is not None:
-                result["band_gap"] = float(doc.band_gap)
+            if band_gap is not None:
+                result["band_gap"] = float(band_gap)
 
-            if hasattr(doc, "density") and doc.density is not None:
-                result["density"] = float(doc.density)
+            if density is not None:
+                result["density"] = float(density)
 
             if hasattr(doc, "is_metal"):
                 result["is_metal"] = bool(doc.is_metal)
@@ -130,12 +192,18 @@ def search_materials_project(
                 result["spacegroup_number"] = doc.symmetry.number
 
             # Save structure if available
-            if hasattr(doc, "structure") and doc.structure is not None:
-                structure_file = (
-                    output_dir / f"{doc.material_id}_{doc.formula_pretty}.cif"
-                )
-                doc.structure.to(filename=str(structure_file))
-                result["structure_file"] = str(structure_file)
+            if structure is not None:
+                try:
+                    structure_file = output_dir / f"{material_id}_{formula}.cif"
+                    if hasattr(structure, "to"):
+                        # It's a Structure object
+                        structure.to(filename=str(structure_file))
+                    else:
+                        struct_obj = Structure.from_dict(structure)
+                        struct_obj.to(filename=str(structure_file))
+                    result["structure_file"] = str(structure_file)
+                except Exception as e:
+                    result["structure_error"] = str(e)
 
             results.append(result)
 
@@ -273,129 +341,100 @@ def analyze_crystal_structure(
 @tool
 def find_pseudopotentials(
     elements: List[str],
-    pp_type: str = "paw",
-    pp_library: str = "psl",
-    functional: str = "pbe",
-) -> str:
-    """Find and validate pseudopotentials for elements.
+    pp_type: str = "PAW",
+    pp_library: str = "pslibrary",
+    functional: str = "PBE",
+    quality: str = "high",
+    relativistic: Optional[bool] = None,
+) -> dict:
+    """Find, download, and extract pseudopotentials from PP metadata.
 
     Args:
-        elements: List of chemical elements
-        pp_type: Pseudopotential type ('paw', 'nc', 'us')
-        pp_library: Pseudopotential library ('psl', 'gbrv', 'sg15')
-        functional: Exchange-correlation functional ('pbe', 'lda', 'pbesol')
+        elements: List of chemical elements (symbols, e.g. ["Si", "O"])
+        pp_type: Pseudopotential type ("PAW", "US", "ONCV")
+        pp_library: Pseudopotential library ("pslibrary", "gbrv", "sg15", "dojo", "SSSP_Efficiency")
+        functional: Exchange-correlation functional ("PBE", "PBEsol", "PZ")
+        quality: Quality level ("high", "medium", "low")
+        relativistic: Whether to use relativistic pseudopotentials (auto-detect for heavy elements if None)
 
     Returns:
-        Information about available pseudopotentials
+        dict with working_dir, found pseudopotentials (local paths), and parameters
     """
     try:
-        # Common pseudopotential naming conventions
-        pp_mappings = {
-            "psl": {
-                "pbe": {
-                    "H": "H.pbe-rrkjus_psl.1.0.0.UPF",
-                    "He": "He.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "Li": "Li.pbe-s-rrkjus_psl.1.0.0.UPF",
-                    "Be": "Be.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "B": "B.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "C": "C.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "N": "N.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "O": "O.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "F": "F.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "Ne": "Ne.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "Na": "Na.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Mg": "Mg.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Al": "Al.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "Si": "Si.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "P": "P.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "S": "S.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "Cl": "Cl.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "Ar": "Ar.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "K": "K.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Ca": "Ca.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Ti": "Ti.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "V": "V.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Cr": "Cr.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Mn": "Mn.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Fe": "Fe.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Co": "Co.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Ni": "Ni.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Cu": "Cu.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Zn": "Zn.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Ga": "Ga.pbe-spn-rrkjus_psl.1.0.0.UPF",
-                    "Ge": "Ge.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "As": "As.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "Se": "Se.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "Br": "Br.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "Kr": "Kr.pbe-n-rrkjus_psl.1.0.0.UPF",
-                    "Pt": "Pt.pbe-spfn-rrkjus_psl.1.0.0.UPF",
-                    "Au": "Au.pbe-spfn-rrkjus_psl.1.0.0.UPF",
-                }
-            }
-        }
+        output_dir = Path(f"{settings.ROOT_PATH}/WORKSPACE/pseudos")
+        output_dir.mkdir(exist_ok=True)
 
-        # Find pseudopotentials for requested elements
         found_pps = {}
         missing_pps = []
 
-        for element in elements:
-            if (
-                pp_library in pp_mappings
-                and functional in pp_mappings[pp_library]
-                and element in pp_mappings[pp_library][functional]
-            ):
-                found_pps[element] = pp_mappings[pp_library][functional][element]
-            else:
-                # Generate a generic filename
-                if pp_library == "psl":
-                    if element in ["H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne"]:
-                        suffix = "rrkjus_psl.1.0.0.UPF"
-                    else:
-                        suffix = "spn-rrkjus_psl.1.0.0.UPF"
-                    pp_filename = f"{element}.{functional}-{suffix}"
+        # Load pseudopotential metadata
+        pp_metadata = load_pseudopotential_metadata()
+
+        for elem in elements:
+            # Search parsed JSON
+            match = None
+            for entry in pp_metadata:
+                if (
+                    entry.get("element", "").capitalize() == elem.capitalize()
+                    and entry.get("pp_type", "").lower() == pp_type.lower()
+                    and entry.get("generator", "").lower() == pp_library.lower()
+                    and entry.get("xc", "").lower() == functional.lower()
+                ):
+                    match = entry
+                    break
+
+            if not match or not match.get("download_url"):
+                missing_pps.append(elem)
+                continue
+
+            url = match["download_url"]
+            local_file = output_dir / Path(url).name
+
+            # Download the pseudopotential if not already present
+            if not local_file.exists():
+                response = requests.get(url, headers=headers)
+                if response.status_code == 200:
+                    with open(local_file, "w") as f:
+                        f.write(response.text)
                 else:
-                    pp_filename = f"{element}.{functional}-{pp_type}.UPF"
+                    missing_pps.append(elem)
+                    continue
 
-                found_pps[element] = pp_filename
-                missing_pps.append(element)
+            # Extract if compressed
+            final_file = local_file
+            if local_file.suffix == ".gz":
+                extracted_file = output_dir / local_file.stem
+                with (
+                    gzip.open(local_file, "rb") as f_in,
+                    open(extracted_file, "wb") as f_out,
+                ):
+                    shutil.copyfileobj(f_in, f_out)
+                final_file = extracted_file
 
-        # Create output directory and save PP mapping
-        output_dir = Path("pseudopotentials")
-        output_dir.mkdir(exist_ok=True)
+            elif local_file.suffixes[-2:] in [
+                [".tar", ".gz"],
+                [".tar", ".bz2"],
+                [".tar", ".xz"],
+            ]:
+                with tarfile.open(local_file, "r:*") as tar:
+                    tar.extractall(output_dir)
+                # pick extracted UPFs
+                extracted_files = list(output_dir.glob("*.UPF")) + list(
+                    output_dir.glob("*.upf")
+                )
+                if extracted_files:
+                    final_file = extracted_files[0]
 
-        pp_data = {
-            "elements": elements,
-            "pp_type": pp_type,
-            "pp_library": pp_library,
-            "functional": functional,
-            "pseudopotentials": found_pps,
-            "missing_or_generic": missing_pps,
-            "notes": "Verify pseudopotential files exist in your PP directory",
+            found_pps[elem] = str(final_file)
+
+        return {
+            "working_dir": str(output_dir.resolve()),
+            "found_pseudopotentials": found_pps,
+            "missing": missing_pps,
         }
 
-        pp_file = output_dir / f"pp_mapping_{functional}_{pp_library}.json"
-        with open(pp_file, "w") as f:
-            json.dump(pp_data, f, indent=2)
-
-        # Create summary
-        summary = f"Pseudopotential mapping for {len(elements)} elements:\\n"
-        summary += f"Functional: {functional.upper()}, Library: {pp_library.upper()}, Type: {pp_type.upper()}\\n\\n"
-
-        for element in elements:
-            summary += f"{element}: {found_pps[element]}"
-            if element in missing_pps:
-                summary += " (verify availability)"
-            summary += "\\n"
-
-        summary += f"\\nMapping saved to: {pp_file}"
-
-        if missing_pps:
-            summary += f"\\n\\nNote: Please verify availability of pseudopotentials for: {', '.join(missing_pps)}"
-
-        return summary
-
     except Exception as e:
-        return f"Error finding pseudopotentials: {str(e)}"
+        return {"error": str(e)}
 
 
 @tool
