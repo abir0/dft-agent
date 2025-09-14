@@ -10,7 +10,7 @@ import json
 import shutil
 import tarfile
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import requests
 from ase.io import read
@@ -62,16 +62,34 @@ PP_METADATA = load_pseudopotential_metadata()
 
 @tool
 def search_materials_project(
-    formula: str,
+    formula: Optional[str] = None,
+    elements: Optional[str] = None,
+    material_ids: Optional[str] = None,
+    chemsys: Optional[str] = None,
     properties: Optional[List[str]] = None,
     limit: int = 10,
+    band_gap: Optional[Tuple[Optional[float], Optional[float]]] = None,
+    formation_energy_per_atom: Optional[Tuple[Optional[float], Optional[float]]] = None,
+    energy_above_hull: Optional[Tuple[Optional[float], Optional[float]]] = None,
+    is_metal: Optional[bool] = None,
+    num_elements: Optional[Tuple[int,int]] = None
 ) -> str:
     """Search Materials Project database for materials.
 
     Args:
         formula: Chemical formula (e.g., 'LiFePO4', 'TiO2', 'Cu')
+        elements: Elements to include (e.g, "LiFePO" or sequence like ["Li","Fe","P","O"] )
+            Use with `num_elements` to bound the number of elements in the composition.
+        material_ids: One or more MP material IDs (eg:["mp-23"])
+        chemsys: Hyphen-joined chemical system (e.g., "Li-Fe-P-O", "Y-H").
         properties: List of properties to retrieve
         limit: Maximum number of results
+        band_gap: (min, max) band gap in eV. Use None for an open bound, e.g., (0.0, None).
+        formation_energy_per_atom: (min, max) formation energy per atom in eV/atom.
+        energy_above_hull: (min, max) energy above hull in eV/atom.
+        is_metal: If set, restrict to metallic (True) or nonmetallic (False) entries.
+        num_elements: (min_elems, max_elems) to constrain the number of elements in the composition.
+        Only used when `elements` is provided.
 
     Returns:
         Search results with material properties
@@ -91,13 +109,38 @@ def search_materials_project(
                 "formation_energy_per_atom",
                 "band_gap",
                 "density",
+                "symmetry",
+                "energy_above_hull",
+                "is_metal",
             ]
+        selectors = [s is not None for s in (formula, elements, material_ids, chemsys)]
+        if sum(selectors) != 1:
+            raise ValueError("Provide exactly one of: formula | elements | material_ids | chemsys")
+
+        query_kwargs = {"fields": properties}
+        if formula is not None:
+            query_kwargs["formula"] = formula
+        elif elements is not None:
+            query_kwargs["elements"] = list(elements)
+            if num_elements is not None:
+                query_kwargs['num_elements'] = list(num_elements)
+        elif material_ids is not None:
+            query_kwargs["material_ids"] = list(material_ids)
+        elif chemsys is not None:
+            query_kwargs["chemsys"] = chemsys
+
+        # Add filters if provided
+        if band_gap is not None:
+            query_kwargs["band_gap"] = band_gap
+        if formation_energy_per_atom is not None:
+            query_kwargs["formation_energy_per_atom"] = formation_energy_per_atom
+        if energy_above_hull is not None:
+            query_kwargs["energy_above_hull"] = energy_above_hull
+        if is_metal is not None:
+            query_kwargs["is_metal"] = is_metal
 
         with MPRester(api_key=api_key) as mpr:
-            # Search without fields parameter (API doesn't support it anymore)
-            docs = mpr.materials.summary.search(formula=formula)
-            # Limit results after getting them
-            docs = docs[:limit]
+            docs = mpr.materials.summary.search(**query_kwargs)[:limit]
 
         if not docs:
             return f"No materials found for formula: {formula}"
@@ -141,13 +184,12 @@ def search_materials_project(
             if density is not None:
                 result["density"] = float(density)
 
-            if symmetry:
-                if isinstance(symmetry, dict):
-                    result["spacegroup"] = symmetry.get("symbol", "unknown")
-                    result["spacegroup_number"] = symmetry.get("number", "unknown")
-                else:
-                    result["spacegroup"] = getattr(symmetry, "symbol", "unknown")
-                    result["spacegroup_number"] = getattr(symmetry, "number", "unknown")
+            if hasattr(doc, "is_metal"):
+                result["is_metal"] = bool(doc.is_metal)
+
+            if hasattr(doc, "symmetry"):
+                result["spacegroup"] = doc.symmetry.symbol
+                result["spacegroup_number"] = doc.symmetry.number
 
             # Save structure if available
             if structure is not None:
@@ -166,14 +208,21 @@ def search_materials_project(
             results.append(result)
 
         # Save search results
-        safe_formula = formula.replace(" ", "_") if formula else "unknown"
-        results_file = output_dir / f"search_{safe_formula}_results.json"
+        tag = (
+            f"formula_{formula}" if formula is not None else
+            f"elements_{'-'.join(elements)}" if elements is not None else
+            f"ids_{len(material_ids)}" if material_ids is not None else
+            f"chemsys_{chemsys}"
+        ).replace(" ", "_")
+        results_file = output_dir / f"search_{tag}_results.json"
         with open(results_file, "w") as f:
             json.dump(results, f, indent=2, default=str)
 
         summary = f"Found {len(results)} materials for {formula}:\\n"
         for result in results:
-            summary += f"- {result['material_id']}: {result['formula']}"
+            metal_str = f" [{'metal' if result.get('is_metal') else 'nonmetal'}]" if 'is_metal' in result else ""
+            summary += f"- {result['material_id']}: {result['formula']}{metal_str}"
+
             if "formation_energy_per_atom" in result:
                 summary += f" (ΔHf: {result['formation_energy_per_atom']:.3f} eV/atom)"
             if "band_gap" in result:
