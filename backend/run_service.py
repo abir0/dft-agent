@@ -8,7 +8,7 @@ load_dotenv()
 
 if __name__ == "__main__":
     uvicorn.run(
-        "api:app",
+        "backend.api.main:app",
         host=settings.HOST,
         port=settings.PORT,
         reload=settings.is_dev(),

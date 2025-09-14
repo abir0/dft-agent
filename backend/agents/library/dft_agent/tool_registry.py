@@ -37,6 +37,13 @@ from backend.agents.dft_tools import (
     verify_job_submission,
 )
 
+# Import adsorption data search tools from tools.py
+from backend.agents.tools import (
+    load_local_adsorption_data,
+    search_adsorption_data,
+    list_available_datasets,
+)
+
 TOOL_REGISTRY: dict[str, Tool] = {
     # Structure generation and manipulation
     "generate_bulk": generate_bulk,
@@ -68,6 +75,10 @@ TOOL_REGISTRY: dict[str, Tool] = {
     "query_calculations": query_calculations,
     "export_results": export_results,
     "search_similar_calculations": search_similar_calculations,
+    # Adsorption data search tools
+    "load_local_adsorption_data": load_local_adsorption_data,
+    "search_adsorption_data": search_adsorption_data,
+    "list_available_datasets": list_available_datasets,
     # SLURM job management
     "generate_slurm_script": generate_slurm_script,
     "submit_slurm_job": submit_slurm_job,

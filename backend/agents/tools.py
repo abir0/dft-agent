@@ -101,6 +101,13 @@ def load_local_adsorption_data(dataset_name: str = "CPD_H") -> Dict[str, Any]:
         return {"error": f"Failed to load dataset: {str(e)}"}
 
 
+"""
+Adsorption Database Search Tools
+
+These tools enable benchmarking of DFT calculations against literature databases.
+Supports searching across multiple datasets with different data formats for validation
+of calculated adsorption energies.
+"""
 @tool
 def search_adsorption_data(
     adsorbate: Optional[str] = None,
@@ -134,10 +141,11 @@ def search_adsorption_data(
         # Check adsorbate
         if adsorbate:
             adsorbate_data = record.get('adsorbate', '')
+            # Handle both object format and string format across datasets
             if isinstance(adsorbate_data, dict):
                 formula = adsorbate_data.get('formula', '')
             else:
-                formula = str(adsorbate_data)  # Handle case where adsorbate is just a string
+                formula = str(adsorbate_data)
             if not formula or adsorbate not in formula:
                 continue
             
