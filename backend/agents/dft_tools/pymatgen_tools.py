@@ -68,26 +68,35 @@ def search_materials_project(
     chemsys: Optional[str] = None,
     properties: Optional[List[str]] = None,
     limit: int = 10,
-    band_gap: Optional[Tuple[Optional[float], Optional[float]]] = None,
-    formation_energy_per_atom: Optional[Tuple[Optional[float], Optional[float]]] = None,
-    energy_above_hull: Optional[Tuple[Optional[float], Optional[float]]] = None,
+    band_gap_min: Optional[float] = None,
+    band_gap_max: Optional[float] = None,
+    formation_energy_per_atom_min: Optional[float] = None,
+    formation_energy_per_atom_max: Optional[float] = None,
+    energy_above_hull_min: Optional[float] = None,
+    energy_above_hull_max: Optional[float] = None,
     is_metal: Optional[bool] = None,
-    num_elements: Optional[Tuple[int,int]] = None
+    num_elements_min: Optional[int] = None,
+    num_elements_max: Optional[int] = None
 ) -> str:
     """Search Materials Project database for materials.
 
     Args:
         formula: Chemical formula (e.g., 'LiFePO4', 'TiO2', 'Cu')
         elements: Elements to include (e.g, "LiFePO" or sequence like ["Li","Fe","P","O"] )
-            Use with `num_elements` to bound the number of elements in the composition.
+            Use with `num_elements_min/max` to bound the number of elements in the composition.
         material_ids: One or more MP material IDs (eg:["mp-23"])
         chemsys: Hyphen-joined chemical system (e.g., "Li-Fe-P-O", "Y-H").
         properties: List of properties to retrieve
         limit: Maximum number of results
-        band_gap: (min, max) band gap in eV. Use None for an open bound, e.g., (0.0, None).
-        formation_energy_per_atom: (min, max) formation energy per atom in eV/atom.
-        energy_above_hull: (min, max) energy above hull in eV/atom.
-        is_metal: If set, restrict to metallic (True) or nonmetallic (False) entries.
+        band_gap_min: Minimum band gap in eV
+        band_gap_max: Maximum band gap in eV
+        formation_energy_per_atom_min: Minimum formation energy per atom in eV/atom
+        formation_energy_per_atom_max: Maximum formation energy per atom in eV/atom
+        energy_above_hull_min: Minimum energy above hull in eV/atom
+        energy_above_hull_max: Maximum energy above hull in eV/atom
+        is_metal: If set, restrict to metallic (True) or nonmetallic (False) entries
+        num_elements_min: Minimum number of elements in composition
+        num_elements_max: Maximum number of elements in composition
         num_elements: (min_elems, max_elems) to constrain the number of elements in the composition.
         Only used when `elements` is provided.
 
@@ -122,20 +131,59 @@ def search_materials_project(
             query_kwargs["formula"] = formula
         elif elements is not None:
             query_kwargs["elements"] = list(elements)
-            if num_elements is not None:
-                query_kwargs['num_elements'] = list(num_elements)
+            if num_elements_min is not None or num_elements_max is not None:
+                num_elements = []
+                if num_elements_min is not None:
+                    num_elements.append(num_elements_min)
+                else:
+                    num_elements.append(1)
+                if num_elements_max is not None:
+                    num_elements.append(num_elements_max)
+                else:
+                    num_elements.append(num_elements_min or 10)
+                query_kwargs['num_elements'] = num_elements
         elif material_ids is not None:
             query_kwargs["material_ids"] = list(material_ids)
         elif chemsys is not None:
             query_kwargs["chemsys"] = chemsys
 
         # Add filters if provided
-        if band_gap is not None:
-            query_kwargs["band_gap"] = band_gap
-        if formation_energy_per_atom is not None:
-            query_kwargs["formation_energy_per_atom"] = formation_energy_per_atom
-        if energy_above_hull is not None:
-            query_kwargs["energy_above_hull"] = energy_above_hull
+        if band_gap_min is not None or band_gap_max is not None:
+            band_gap = []
+            if band_gap_min is not None:
+                band_gap.append(band_gap_min)
+            else:
+                band_gap.append(None)
+            if band_gap_max is not None:
+                band_gap.append(band_gap_max)
+            else:
+                band_gap.append(None)
+            query_kwargs["band_gap"] = tuple(band_gap)
+            
+        if formation_energy_per_atom_min is not None or formation_energy_per_atom_max is not None:
+            formation_energy_per_atom = []
+            if formation_energy_per_atom_min is not None:
+                formation_energy_per_atom.append(formation_energy_per_atom_min)
+            else:
+                formation_energy_per_atom.append(None)
+            if formation_energy_per_atom_max is not None:
+                formation_energy_per_atom.append(formation_energy_per_atom_max)
+            else:
+                formation_energy_per_atom.append(None)
+            query_kwargs["formation_energy_per_atom"] = tuple(formation_energy_per_atom)
+            
+        if energy_above_hull_min is not None or energy_above_hull_max is not None:
+            energy_above_hull = []
+            if energy_above_hull_min is not None:
+                energy_above_hull.append(energy_above_hull_min)
+            else:
+                energy_above_hull.append(None)
+            if energy_above_hull_max is not None:
+                energy_above_hull.append(energy_above_hull_max)
+            else:
+                energy_above_hull.append(None)
+            query_kwargs["energy_above_hull"] = tuple(energy_above_hull)
+            
         if is_metal is not None:
             query_kwargs["is_metal"] = is_metal
 
